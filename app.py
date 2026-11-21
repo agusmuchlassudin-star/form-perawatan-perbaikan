@@ -33,7 +33,6 @@ div[data-testid="stForm"] {background:white;padding:24px;border-radius:18px;box-
 h3 {color:#0f2a4d !important;background:#fff7ed;padding:10px 14px;border-radius:10px;border-left:5px solid #f28c28;font-size:17px !important;}
 </style>
 """, unsafe_allow_html=True)
-</style>
 
 SHEET_HEADERS = [
     "ID", "Tanggal Perawatan", "Jenis Sarana", "Nomor Sarana", "Jenis Perawatan",
