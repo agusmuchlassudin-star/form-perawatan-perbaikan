@@ -103,7 +103,8 @@ def upload_photo(drive, uploaded_file, folder_id, filename, make_public=False):
         ).execute()
     return result.get("webViewLink", f"https://drive.google.com/file/d/{result['id']}/view")
 
-def load_records(ws):
+@st.cache_data(ttl=60)
+def load_records(_ws):
     values = ws.get_all_records()
     if not values:
         return pd.DataFrame(columns=SHEET_HEADERS)
