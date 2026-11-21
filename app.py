@@ -34,7 +34,6 @@ h3 {color:#0f2a4d !important;background:#fff7ed;padding:10px 14px;border-radius:
 </style>
 """, unsafe_allow_html=True)
 </style>
-""", unsafe_allow_html=True)
 
 SHEET_HEADERS = [
     "ID", "Tanggal Perawatan", "Jenis Sarana", "Nomor Sarana", "Jenis Perawatan",
