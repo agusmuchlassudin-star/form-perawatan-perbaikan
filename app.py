@@ -111,7 +111,7 @@ def add_record(ws, record):
     ws.append_row([record.get(h, "") for h in SHEET_HEADERS], value_input_option="USER_ENTERED")
     st.cache_data.clear()
 
-st.markdown("""
+st.markdown('<div style="background:#123b68;padding:22px 26px;border-radius:15px;color:white;"><h1 style="color:white;margin:0;font-size:28px;">SISTEM DATA PERAWATAN SARANA</h1><p style="color:#e8f2ff;margin:6px 0 0 0;">GD - GB - B - Database Google Spreadsheet</p></div>', unsafe_allow_html=True)
 <div class="main-title">
 <div class="icon">GD</div>
 <div><h1>SISTEM DATA PERAWATAN SARANA</h1>
