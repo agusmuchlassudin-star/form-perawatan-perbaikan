@@ -18,14 +18,12 @@ st.markdown("""
 .main-title h1 {color:white;margin:0;font-size:30px}
 .main-title p {color:#e8f2ff;margin:6px 0 0 0}
 div.stButton>button[kind="primary"] {background:#f28c28;border-color:#f28c28;color:white}
-.metric-card {background:white;border:1px solid #e5eaf1;border-radius:12px;padding:14px}
 </style>
 """, unsafe_allow_html=True)
 
 SHEET_HEADERS = [
     "ID", "Tanggal Perawatan", "Jenis Sarana", "Nomor Sarana", "Jenis Perawatan",
-    "Depo/Lokasi", "Komponen", "Jenis Pekerjaan", "Kondisi Sebelum",
-    "Tindakan Perawatan", "Kondisi Sesudah", "Nama Petugas", "NIPP",
+    "Depo/Lokasi", "Dipo Induk", "Nama Petugas", "NIPP",
     "Foto Sebelum", "Foto Sesudah", "Keterangan", "Waktu Input",
     "Mulai Dinas", "Siklus Perawatan", "Nomor Bogie 1", "Nomor Bogie 2",
     "Ukuran Roda", "Diameter B1 R1", "Diameter B1 R2", "Diameter B1 R3", "Diameter B1 R4",
@@ -39,23 +37,18 @@ SHEET_HEADERS = [
     "Lain-lain", "Status SO/TSO"
 ]
 SHEET_NAME = "Data Perawatan"
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
-]
+SCOPES = ["https://www.googleapis.com/auth/spreadsheets","https://www.googleapis.com/auth/drive"]
 
 def get_config():
     if "gcp_service_account" not in st.secrets:
-        st.error("Konfigurasi Google belum ditemukan. Buat file .streamlit/secrets.toml sesuai README.")
+        st.error("Konfigurasi Google belum ditemukan.")
         st.stop()
     return st.secrets
 
 @st.cache_resource
 def connect_google():
     cfg = get_config()
-    credentials = Credentials.from_service_account_info(
-        dict(cfg["gcp_service_account"]), scopes=SCOPES
-    )
+    credentials = Credentials.from_service_account_info(dict(cfg["gcp_service_account"]), scopes=SCOPES)
     gc = gspread.authorize(credentials)
     spreadsheet_id = cfg.get("spreadsheet_id", "")
     if not spreadsheet_id:
@@ -72,53 +65,38 @@ def connect_google():
         ws.resize(cols=len(SHEET_HEADERS))
         ws.append_row(SHEET_HEADERS)
     else:
-        # Tambahkan kolom baru di ujung kanan agar data lama tetap utuh.
         missing_headers = [h for h in SHEET_HEADERS if h not in existing_headers]
         if missing_headers:
             updated_headers = existing_headers + missing_headers
             ws.resize(cols=max(len(updated_headers), ws.col_count))
             ws.update(range_name=f'A1:{gspread.utils.rowcol_to_a1(1, len(updated_headers))}', values=[updated_headers])
-        if any(h not in ws.row_values(1) for h in SHEET_HEADERS):
-            st.error("Header Google Spreadsheet belum sesuai. Periksa baris pertama pada tab Data Perawatan.")
-            st.stop()
     drive = build("drive", "v3", credentials=credentials, cache_discovery=False)
     return sh, ws, drive, cfg
 
 def upload_photo(drive, uploaded_file, folder_id, filename, make_public=False):
-    if uploaded_file is None:
-        return ""
+    if uploaded_file is None: return ""
     metadata = {"name": filename}
-    if folder_id:
-        metadata["parents"] = [folder_id]
-    media = MediaIoBaseUpload(BytesIO(uploaded_file.getvalue()),
-                              mimetype=uploaded_file.type or "application/octet-stream",
-                              resumable=True)
-    result = drive.files().create(body=metadata, media_body=media,
-                                  fields="id,webViewLink").execute()
+    if folder_id: metadata["parents"] = [folder_id]
+    media = MediaIoBaseUpload(BytesIO(uploaded_file.getvalue()), mimetype=uploaded_file.type or "application/octet-stream", resumable=True)
+    result = drive.files().create(body=metadata, media_body=media, fields="id,webViewLink").execute()
     if make_public:
-        drive.permissions().create(
-            fileId=result["id"],
-            body={"type":"anyone","role":"reader"},
-            fields="id"
-        ).execute()
+        drive.permissions().create(fileId=result["id"], body={"type":"anyone","role":"reader"}, fields="id").execute()
     return result.get("webViewLink", f"https://drive.google.com/file/d/{result['id']}/view")
 
 @st.cache_data(ttl=60)
 def load_records(_ws):
-    values = ws.get_all_records()
-    if not values:
-        return pd.DataFrame(columns=SHEET_HEADERS)
+    values = _ws.get_all_records()
+    if not values: return pd.DataFrame(columns=SHEET_HEADERS)
     df = pd.DataFrame(values)
     for col in SHEET_HEADERS:
-        if col not in df.columns:
-            df[col] = ""
+        if col not in df.columns: df[col] = ""
     return df[SHEET_HEADERS]
 
-def make_id():
-    return datetime.now().strftime("PRW%Y%m%d%H%M%S%f")
+def make_id(): return datetime.now().strftime("PRW%Y%m%d%H%M%S%f")
 
 def add_record(ws, record):
     ws.append_row([record.get(h, "") for h in SHEET_HEADERS], value_input_option="USER_ENTERED")
+    st.cache_data.clear()
 
 st.markdown("""
 <div class="main-title">
@@ -131,7 +109,6 @@ try:
     sh, ws, drive, cfg = connect_google()
 except Exception as e:
     st.error(f"Gagal terhubung ke Google: {e}")
-    st.info("Periksa Spreadsheet ID, akses service account, dan konfigurasi Google Drive API.")
     st.stop()
 
 folder_id = str(cfg.get("drive_folder_id", "")).strip()
@@ -166,41 +143,58 @@ if page == "Dashboard":
 
 elif page == "Input Perawatan":
     st.subheader("Form Input Pemeriksaan & Pemeliharaan Sarana")
-    st.caption("Isi data sesuai hasil pemeriksaan. Kolom ukuran dapat diisi angka atau keterangan sesuai satuan yang digunakan.")
     with st.form("form_perawatan", clear_on_submit=True):
+        # --- 1. IDENTITAS SARANA - UDAH DIUBAH SESUAI REQUEST ---
         st.markdown("### 1. Identitas Sarana")
-        a,b,c = st.columns(3)
-        with a:
-            jenis_sarana = st.selectbox("Jenis sarana", ["GD", "GB", "B", "Lainnya"])
-            jenis_lain = st.text_input("Jika jenis sarana Lainnya, tuliskan")
-            nomor = st.text_input("Nomor sarana")
-        with b:
-            mulai_dinas = st.date_input("Mulai dinas", value=date.today())
-            siklus = st.selectbox("Siklus pemeriksaan", ["P24", "P48"])
-        with c:
-            tanggal = st.date_input("Tanggal pemeriksaan / pemeliharaan", value=date.today())
-            jenis_perawatan = st.selectbox("Program pemeliharaan", ["P1", "P3", "P6", "P12", "Perbaikan"])
+        # Nomor disamping Jenis Sarana
+        a,b = st.columns(2)
+        with a: jenis_sarana = st.selectbox("Jenis sarana", ["GD", "GB", "B", "Lainnya"])
+        with b: nomor = st.text_input("Nomor sarana")
+        # Baris ke-2: Mulai Dinas, P24/P48 (Tanggal), Tanggal Perawatan
+        c,d,e = st.columns(3)
+        with c: mulai_dinas = st.date_input("Mulai dinas", value=date.today())
+        with d: siklus = st.date_input("P24 / P48", value=date.today(), help="Diisi pake tanggal P24 / P48")
+        with e: tanggal = st.date_input("Tanggal pemeriksaan / pemeliharaan", value=date.today())
+        # Baris ke-3: Program + Dipo Induk
+        f,g = st.columns(2)
+        with f: jenis_perawatan = st.selectbox("Program pemeliharaan", ["P1", "P3", "P6", "P12", "Perbaikan"])
+        with g: dipo_induk = st.text_input("Dipo Induk", placeholder="Kosongkan / isi Dipo Induk...")
+
         st.markdown("### 2. Identitas Bogie")
         b1,b2 = st.columns(2)
         with b1: no_bogie1 = st.text_input("Nomor Bogie 1")
         with b2: no_bogie2 = st.text_input("Nomor Bogie 2")
+
+        # --- 3. PENGUKURAN RODA SIMPLE TANPA RANGE ---
         st.markdown("### 3. Pengukuran Roda")
-        ukuran_roda = st.text_input("Ukuran roda (satuan / standar yang digunakan)")
-        def input_roda(kategori, label):
-            st.markdown(f"**{label}**")
-            x,y = st.columns(2)
-            hasil = {}
-            for bogie, col in [(1,x),(2,y)]:
-                with col:
-                    st.caption(f"Bogie {bogie}")
-                    vals=[]
-                    for roda in range(1,5):
-                        vals.append(st.text_input(f"{kategori} roda {roda}", key=f"{kategori}_{bogie}_{roda}"))
-                    hasil[bogie]=vals
-            return hasil
-        diameter = input_roda("Diameter", "Diameter roda")
-        flens = input_roda("Flens", "Flens roda")
-        bidang = input_roda("Bidang Jalan", "Bidang jalan")
+        # Ukuran langsung ada mm di belakangnya, gak pake kolom sendiri
+        uk1, uk2 = st.columns([4,1])
+        with uk1: ukuran_roda = st.text_input("Ukuran roda", placeholder="Contoh: 798")
+        with uk2:
+            st.markdown("<div style='padding-top:28px; font-weight:bold;'>mm</div>", unsafe_allow_html=True)
+        diameter = {1: [], 2: []}
+        flens = {1: [], 2: []}
+        bidang = {1: [], 2: []}
+        for bogie in [1, 2]:
+            st.markdown(f"#### BOGIE {bogie}")
+            h0,h1,h2,h3 = st.columns([1,2,2,2])
+            with h0: st.caption("RODA")
+            with h1: st.caption("Keausan Flens")
+            with h2: st.caption("Tinggi Flens")
+            with h3: st.caption("Diameter")
+            for roda in range(1,5):
+                c0,c1,c2,c3 = st.columns([1,2,2,2])
+                with c0: st.markdown(f"**Roda {roda}**")
+                with c1:
+                    v1 = st.text_input(f"Keausan B{bogie} R{roda}", key=f"keausan_b{bogie}_r{roda}_v4", label_visibility="collapsed", placeholder="0.0")
+                    flens[bogie].append(v1)
+                with c2:
+                    v2 = st.text_input(f"Tinggi B{bogie} R{roda}", key=f"tinggi_b{bogie}_r{roda}_v4", label_visibility="collapsed", placeholder="0.0")
+                    bidang[bogie].append(v2)
+                with c3:
+                    v3 = st.text_input(f"Diameter B{bogie} R{roda}", key=f"diam_b{bogie}_r{roda}_v4", label_visibility="collapsed", placeholder="0")
+                    diameter[bogie].append(v3)
+
         st.markdown("### 4. Pemeriksaan Komponen dan Kelengkapan")
         k1,k2 = st.columns(2)
         with k1:
@@ -220,7 +214,7 @@ elif page == "Input Perawatan":
         with p5: cd = st.text_input("CD")
         with p6: tekanan_bc = st.text_input("Tekanan BC")
         st.markdown("### 6. Catatan Lain-lain")
-        lainnya = st.text_area("Lain-lain / temuan pemeriksaan", height=180, placeholder="Ketik catatan atau temuan pemeriksaan secara bebas...")
+        lainnya = st.text_area("Lain-lain / temuan pemeriksaan", height=180)
         st.markdown("### 7. Dokumentasi Foto")
         p1,p2 = st.columns(2)
         with p1: foto_sebelum = st.file_uploader("Foto sebelum pemeriksaan", type=["jpg","jpeg","png","webp"], key="foto_sebelum")
@@ -232,36 +226,26 @@ elif page == "Input Perawatan":
             petugas = st.text_input("Nama petugas / teknisi")
         with d:
             nipp = st.text_input("NIPP")
-            komponen = st.text_input("Komponen yang diperiksa")
-        pekerjaan = st.text_input("Jenis pekerjaan / tindakan")
-        sebelum = st.text_area("Kondisi sebelum", height=75)
-        tindakan = st.text_area("Tindakan perawatan", height=75)
-        sesudah = st.text_area("Kondisi sesudah", height=75)
-        keterangan = st.text_area("Keterangan tambahan", height=75)
+            keterangan = st.text_area("Keterangan tambahan", height=75)
         submitted = st.form_submit_button("SIMPAN DATA PEMERIKSAAN", type="primary", use_container_width=True)
 
     if submitted:
         if not nomor.strip():
             st.error("Nomor sarana wajib diisi.")
-        elif jenis_sarana == "Lainnya" and not jenis_lain.strip():
-            st.error("Tuliskan jenis sarana lainnya.")
         else:
             try:
                 record_id = make_id()
                 with st.spinner("Mengunggah foto dan menyimpan data..."):
                     foto1 = upload_photo(drive, foto_sebelum, folder_id, f"{record_id}_sebelum_{foto_sebelum.name}" if foto_sebelum else "", make_public) if foto_sebelum else ""
                     foto2 = upload_photo(drive, foto_sesudah, folder_id, f"{record_id}_sesudah_{foto_sesudah.name}" if foto_sesudah else "", make_public) if foto_sesudah else ""
-                    jenis_final = jenis_lain.strip() if jenis_sarana == "Lainnya" else jenis_sarana
                     record = {
                         "ID": record_id, "Tanggal Perawatan": tanggal.strftime("%Y-%m-%d"),
-                        "Jenis Sarana": jenis_final, "Nomor Sarana": nomor.strip().upper(),
-                        "Jenis Perawatan": jenis_perawatan, "Depo/Lokasi": lokasi,
-                        "Komponen": komponen, "Jenis Pekerjaan": pekerjaan,
-                        "Kondisi Sebelum": sebelum, "Tindakan Perawatan": tindakan,
-                        "Kondisi Sesudah": sesudah, "Nama Petugas": petugas, "NIPP": nipp,
+                        "Jenis Sarana": jenis_sarana, "Nomor Sarana": nomor.strip().upper(),
+                        "Jenis Perawatan": jenis_perawatan, "Depo/Lokasi": lokasi, "Dipo Induk": dipo_induk,
+                        "Nama Petugas": petugas, "NIPP": nipp,
                         "Foto Sebelum": foto1, "Foto Sesudah": foto2,
                         "Keterangan": keterangan, "Waktu Input": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "Mulai Dinas": mulai_dinas.strftime("%Y-%m-%d"), "Siklus Perawatan": siklus,
+                        "Mulai Dinas": mulai_dinas.strftime("%Y-%m-%d"), "Siklus Perawatan": siklus.strftime("%Y-%m-%d"),
                         "Nomor Bogie 1": no_bogie1, "Nomor Bogie 2": no_bogie2, "Ukuran Roda": ukuran_roda,
                         **{f"Diameter B{b} R{r+1}": diameter[b][r] for b in (1,2) for r in range(4)},
                         **{f"Flens B{b} R{r+1}": flens[b][r] for b in (1,2) for r in range(4)},
@@ -281,61 +265,44 @@ elif page == "Input Perawatan":
 elif page == "Riwayat Perawatan":
     st.subheader("Riwayat Perawatan per Nomor Sarana")
     q1,q2 = st.columns([1,2])
-    with q1:
-        tipe_filter = st.selectbox("Jenis sarana", ["Semua", "GD", "GB", "B"])
-    with q2:
-        nomor_filter = st.text_input("Cari nomor GD / B", placeholder="Contoh: 421005 atau B 12345")
+    with q1: tipe_filter = st.selectbox("Jenis sarana", ["Semua", "GD", "GB", "B"])
+    with q2: nomor_filter = st.text_input("Cari nomor GD / B", placeholder="Contoh: 421005 atau B 12345")
     filtered = df.copy()
-    if tipe_filter != "Semua":
-        filtered = filtered[filtered["Jenis Sarana"].astype(str) == tipe_filter]
-    if nomor_filter.strip():
-        filtered = filtered[filtered["Nomor Sarana"].astype(str).str.contains(nomor_filter.strip(), case=False, na=False)]
+    if tipe_filter != "Semua": filtered = filtered[filtered["Jenis Sarana"].astype(str) == tipe_filter]
+    if nomor_filter.strip(): filtered = filtered[filtered["Nomor Sarana"].astype(str).str.contains(nomor_filter.strip(), case=False, na=False)]
     st.caption(f"Ditemukan {len(filtered)} catatan perawatan")
     if len(filtered):
         filtered = filtered.sort_values("Tanggal Perawatan", ascending=False)
-        st.dataframe(filtered, use_container_width=True, hide_index=True,
-                     column_config={
-                         "Foto Sebelum": st.column_config.LinkColumn("Foto Sebelum"),
-                         "Foto Sesudah": st.column_config.LinkColumn("Foto Sesudah")
-                     })
+        st.dataframe(filtered, use_container_width=True, hide_index=True, column_config={"Foto Sebelum": st.column_config.LinkColumn("Foto Sebelum"), "Foto Sesudah": st.column_config.LinkColumn("Foto Sesudah")})
         pilihan = st.selectbox("Lihat detail nomor sarana", ["-- Pilih --"] + sorted(filtered["Nomor Sarana"].astype(str).unique().tolist()))
         if pilihan != "-- Pilih --":
             detail = filtered[filtered["Nomor Sarana"].astype(str) == pilihan].sort_values("Tanggal Perawatan", ascending=False)
             st.markdown(f"#### Riwayat {pilihan}")
             for _, r in detail.iterrows():
-                with st.expander(f"{r['Tanggal Perawatan']} · {r['Jenis Perawatan']} · {r['Komponen']}"):
+                with st.expander(f"{r['Tanggal Perawatan']} · {r['Jenis Perawatan']}"):
+                    st.write("**Dipo Induk:**", r.get("Dipo Induk",""))
                     st.write("**Lokasi:**", r["Depo/Lokasi"])
-                    st.write("**Kondisi sebelum:**", r["Kondisi Sebelum"])
-                    st.write("**Tindakan:**", r["Tindakan Perawatan"])
-                    st.write("**Kondisi sesudah:**", r["Kondisi Sesudah"])
                     st.write("**Petugas:**", r["Nama Petugas"], "| **NIPP:**", r["NIPP"])
                     if r["Foto Sebelum"]: st.markdown(f"[Buka foto sebelum]({r['Foto Sebelum']})")
                     if r["Foto Sesudah"]: st.markdown(f"[Buka foto sesudah]({r['Foto Sesudah']})")
                     if r["Keterangan"]: st.write("**Keterangan:**", r["Keterangan"])
-    else:
-        st.info("Data tidak ditemukan.")
+    else: st.info("Data tidak ditemukan.")
 
 elif page == "Laporan Otomatis":
     st.subheader("Laporan Data Perawatan")
-    if df.empty:
-        st.info("Belum ada data untuk dilaporkan.")
+    if df.empty: st.info("Belum ada data untuk dilaporkan.")
     else:
         l,r = st.columns(2)
-        with l:
-            start = st.date_input("Dari tanggal", value=date(date.today().year,1,1), key="start")
-        with r:
-            end = st.date_input("Sampai tanggal", value=date.today(), key="end")
+        with l: start = st.date_input("Dari tanggal", value=date(date.today().year,1,1), key="start")
+        with r: end = st.date_input("Sampai tanggal", value=date.today(), key="end")
         report = df.copy()
         dates = pd.to_datetime(report["Tanggal Perawatan"], errors="coerce")
         report = report[(dates.dt.date >= start) & (dates.dt.date <= end)]
         x,y = st.columns(2)
-        with x:
-            jenis = st.multiselect("Jenis sarana", ["GD","GB","B"], default=["GD","GB","B"])
-        with y:
-            perawatan = st.multiselect("Jenis perawatan", sorted(df["Jenis Perawatan"].dropna().astype(str).unique()))
+        with x: jenis = st.multiselect("Jenis sarana", ["GD","GB","B"], default=["GD","GB","B"])
+        with y: perawatan = st.multiselect("Jenis perawatan", sorted(df["Jenis Perawatan"].dropna().astype(str).unique()))
         report = report[report["Jenis Sarana"].isin(jenis)]
-        if perawatan:
-            report = report[report["Jenis Perawatan"].isin(perawatan)]
+        if perawatan: report = report[report["Jenis Perawatan"].isin(perawatan)]
         m1,m2,m3 = st.columns(3)
         m1.metric("Jumlah catatan", len(report))
         m2.metric("GD + GB", int(report["Jenis Sarana"].isin(["GD", "GB"]).sum()))
@@ -347,10 +314,6 @@ elif page == "Laporan Otomatis":
             csv = report.to_csv(index=False).encode("utf-8-sig")
             st.download_button("Unduh laporan CSV", csv, file_name=f"laporan_perawatan_{start}_{end}.csv", mime="text/csv")
             excel_buffer = BytesIO()
-            with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
-                report.to_excel(writer, index=False, sheet_name="Laporan")
-            st.download_button("Unduh laporan Excel", excel_buffer.getvalue(),
-                               file_name=f"laporan_perawatan_{start}_{end}.xlsx",
-                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        else:
-            st.warning("Tidak ada data pada filter periode tersebut.")
+            with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer: report.to_excel(writer, index=False, sheet_name="Laporan")
+            st.download_button("Unduh laporan Excel", excel_buffer.getvalue(), file_name=f"laporan_perawatan_{start}_{end}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        else: st.warning("Tidak ada data pada filter periode tersebut.")
