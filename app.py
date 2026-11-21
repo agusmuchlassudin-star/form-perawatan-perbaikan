@@ -12,29 +12,27 @@ st.set_page_config(page_title="Sistem Data Perawatan GD & B", page_icon="🚆", 
 # ===== TAMPILAN BARU - LEBIH MENARIK =====
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
-* {font-family: 'Plus Jakarta Sans', sans-serif !important;}
 .stApp {background:#eef2f7;}
 [data-testid="stSidebar"] {background:linear-gradient(180deg,#0f2a4d 0%,#123b68 60%,#176a9a 100%);}
-[data-testid="stSidebar"] * {color:white !important;}
-[data-testid="stSidebar"] [data-testid="stRadio"] label {background:rgba(255,255,255,0.08);padding:10px 14px;border-radius:10px;margin-bottom:6px;border:1px solid rgba(255,255,255,0.12);}
-[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {background:rgba(255,255,255,0.18);}
+/* Sidebar aja yang putih, isi utama jangan ikut putih */
+[data-testid="stSidebar"] p, [data-testid="stSidebar"] span, [data-testid="stSidebar"] label, [data-testid="stSidebar"] div {color:white !important;}
+/* ISI UTAMA DIPAKSA HITAM BIAR KELIATAN */
+.main *, [data-testid="stMain"] *, [data-testid="stMain"] p, [data-testid="stMain"] span, [data-testid="stMain"] label, [data-testid="stMain"] div {color:#0f2a4d !important;}
+[data-testid="stMain"] input, [data-testid="stMain"] textarea, [data-testid="stMain"] select {color:#000 !important; background:white !important;}
+[data-testid="stMain"] input::placeholder {color:#94a3b8 !important;}
 
 .main-title {background:linear-gradient(110deg,#0f2a4d,#123b68 45%,#f28c28 130%);padding:24px 26px;border-radius:18px;color:white;margin-bottom:20px;box-shadow:0 10px 25px rgba(15,42,77,0.25);display:flex;align-items:center;gap:16px}
-.main-title h1 {color:white;margin:0;font-size:30px;font-weight:800;letter-spacing:-0.5px;line-height:1.1}
-.main-title p {color:#dbeafe;margin:8px 0 0 0;font-size:14px}
+.main-title h1, .main-title p, .main-title div {color:white !important;}
+.main-title h1 {margin:0;font-size:30px;font-weight:800;line-height:1.1}
+.main-title p {color:#dbeafe !important;margin:8px 0 0 0;font-size:14px}
 .main-title .icon {font-size:48px;background:rgba(255,255,255,0.15);width:72px;height:72px;border-radius:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 
 div[data-testid="stMetric"] {background:white;padding:16px;border-radius:16px;box-shadow:0 4px 14px rgba(0,0,0,0.06);border:1px solid #e5e9f0;}
-div[data-testid="stMetric"] label {color:#64748b !important;font-weight:600;}
-div[data-testid="stMetric"] [data-testid="stMetricValue"] {color:#0f2a4d !important;font-weight:800;}
-
-div.stButton>button[kind="primary"] {background:linear-gradient(90deg,#f28c28,#ff9d3c);border:none;color:white;font-weight:800;padding:14px;border-radius:12px;box-shadow:0 6px 18px rgba(242,140,40,0.35);font-size:16px;}
-div.stButton>button[kind="primary"]:hover {transform:translateY(-1px);box-shadow:0 8px 22px rgba(242,140,40,0.45);}
+div.stButton>button[kind="primary"] {background:linear-gradient(90deg,#f28c28,#ff9d3c);border:none;color:white !important;font-weight:800;padding:14px;border-radius:12px;box-shadow:0 6px 18px rgba(242,140,40,0.35);font-size:16px;}
 div[data-testid="stForm"] {background:white;padding:24px;border-radius:18px;box-shadow:0 6px 20px rgba(0,0,0,0.06);border:1px solid #e8edf3;}
-div[data-testid="stExpander"] {background:white;border-radius:14px !important;border:1px solid #e8edf3 !important;}
-input, select, textarea {border-radius:10px !important;}
 h3 {color:#0f2a4d !important;background:#fff7ed;padding:10px 14px;border-radius:10px;border-left:5px solid #f28c28;font-size:17px !important;}
+</style>
+""", unsafe_allow_html=True)
 </style>
 """, unsafe_allow_html=True)
 
