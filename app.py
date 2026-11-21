@@ -114,7 +114,7 @@ def add_record(ws, record):
 
 st.markdown("""
 <div class="main-title">
-<div class="icon">🚆</div>
+<div class="icon">GD</div>
 <div><h1>SISTEM DATA PERAWATAN SARANA</h1><p>GD &nbsp;•&nbsp; GB &nbsp;•&nbsp; B &nbsp;•&nbsp; Database Google Spreadsheet &nbsp;•&nbsp; Realtime</p></div>
 </div>
 """, unsafe_allow_html=True)
