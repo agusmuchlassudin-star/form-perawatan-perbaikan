@@ -8,8 +8,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
 st.set_page_config(page_title="Sistem Data Perawatan GD dan B", page_icon="train", layout="wide")
-st.markdown('<style>.stApp{background:#eef2f7} div.stButton>button[kind="primary"]{background:#f28c28;border:none;color:white;font-weight:800;padding:14px;border-radius:12px;} h3{color:#0f2a4d !important;background:#fff7ed;padding:10px 14px;border-radius:10px;border-left:5px solid #f28c28;}</style>', unsafe_allow_html=True)
-
+st.markdown('<style>.stApp{background:#eaf2fb !important} [data-testid="stSidebar"]{background:linear-gradient(180deg,#0f2a4d,#14549e) !important} [data-testid="stSidebar"] *{color:white !important} .stApp *{color:#0f2a4d !important} .stApp input, .stApp textarea, .stApp select{color:#0f2a4d !important;background:white !important;border:1px solid #bcd3ee !important} .stApp input::placeholder, .stApp textarea::placeholder{color:#7aa3cc !important} div[data-testid="stMetric"]{background:white !important;border:1px solid #bcd3ee !important;border-radius:14px} div.stButton>button[kind="primary"]{background:#14549e !important;border:none;color:white !important;font-weight:800;padding:14px;border-radius:12px;} h3{color:white !important;background:#14549e;padding:10px 14px;border-radius:10px;} h4{color:#14549e !important}</style>', unsafe_allow_html=True)
 SHEET_HEADERS = [
     "ID", "Tanggal Perawatan", "Jenis Sarana", "Nomor Sarana", "Jenis Perawatan",
     "Depo/Lokasi", "Dipo Induk", "Nama Petugas", "NIPP",
