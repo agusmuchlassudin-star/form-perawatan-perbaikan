@@ -116,7 +116,6 @@ st.markdown("""
 <div class="main-title">
 <div class="icon">GD</div>
 <div><h1>SISTEM DATA PERAWATAN SARANA</h1>
-""", unsafe_allow_html=True)
 
 try:
     sh, ws, drive, cfg = connect_google()
