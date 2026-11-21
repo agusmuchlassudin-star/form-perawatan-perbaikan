@@ -9,15 +9,32 @@ from googleapiclient.http import MediaIoBaseUpload
 
 st.set_page_config(page_title="Sistem Data Perawatan GD & B", page_icon="🚆", layout="wide")
 
+# ===== TAMPILAN BARU - LEBIH MENARIK =====
 st.markdown("""
 <style>
-.stApp {background:#f4f7fb;}
-[data-testid="stSidebar"] {background:#102d50;}
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
+* {font-family: 'Plus Jakarta Sans', sans-serif !important;}
+.stApp {background:#eef2f7;}
+[data-testid="stSidebar"] {background:linear-gradient(180deg,#0f2a4d 0%,#123b68 60%,#176a9a 100%);}
 [data-testid="stSidebar"] * {color:white !important;}
-.main-title {background:linear-gradient(110deg,#123b68,#176a9a);padding:22px 26px;border-radius:15px;color:white;margin-bottom:18px}
-.main-title h1 {color:white;margin:0;font-size:30px}
-.main-title p {color:#e8f2ff;margin:6px 0 0 0}
-div.stButton>button[kind="primary"] {background:#f28c28;border-color:#f28c28;color:white}
+[data-testid="stSidebar"] [data-testid="stRadio"] label {background:rgba(255,255,255,0.08);padding:10px 14px;border-radius:10px;margin-bottom:6px;border:1px solid rgba(255,255,255,0.12);}
+[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {background:rgba(255,255,255,0.18);}
+
+.main-title {background:linear-gradient(110deg,#0f2a4d,#123b68 45%,#f28c28 130%);padding:24px 26px;border-radius:18px;color:white;margin-bottom:20px;box-shadow:0 10px 25px rgba(15,42,77,0.25);display:flex;align-items:center;gap:16px}
+.main-title h1 {color:white;margin:0;font-size:30px;font-weight:800;letter-spacing:-0.5px;line-height:1.1}
+.main-title p {color:#dbeafe;margin:8px 0 0 0;font-size:14px}
+.main-title .icon {font-size:48px;background:rgba(255,255,255,0.15);width:72px;height:72px;border-radius:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+
+div[data-testid="stMetric"] {background:white;padding:16px;border-radius:16px;box-shadow:0 4px 14px rgba(0,0,0,0.06);border:1px solid #e5e9f0;}
+div[data-testid="stMetric"] label {color:#64748b !important;font-weight:600;}
+div[data-testid="stMetric"] [data-testid="stMetricValue"] {color:#0f2a4d !important;font-weight:800;}
+
+div.stButton>button[kind="primary"] {background:linear-gradient(90deg,#f28c28,#ff9d3c);border:none;color:white;font-weight:800;padding:14px;border-radius:12px;box-shadow:0 6px 18px rgba(242,140,40,0.35);font-size:16px;}
+div.stButton>button[kind="primary"]:hover {transform:translateY(-1px);box-shadow:0 8px 22px rgba(242,140,40,0.45);}
+div[data-testid="stForm"] {background:white;padding:24px;border-radius:18px;box-shadow:0 6px 20px rgba(0,0,0,0.06);border:1px solid #e8edf3;}
+div[data-testid="stExpander"] {background:white;border-radius:14px !important;border:1px solid #e8edf3 !important;}
+input, select, textarea {border-radius:10px !important;}
+h3 {color:#0f2a4d !important;background:#fff7ed;padding:10px 14px;border-radius:10px;border-left:5px solid #f28c28;font-size:17px !important;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -93,15 +110,14 @@ def load_records(_ws):
     return df[SHEET_HEADERS]
 
 def make_id(): return datetime.now().strftime("PRW%Y%m%d%H%M%S%f")
-
 def add_record(ws, record):
     ws.append_row([record.get(h, "") for h in SHEET_HEADERS], value_input_option="USER_ENTERED")
     st.cache_data.clear()
 
 st.markdown("""
 <div class="main-title">
-<h1>🚆 SISTEM DATA PERAWATAN SARANA</h1>
-<p>GD · GB · B · Lainnya · Database Google Spreadsheet</p>
+<div class="icon">🚆</div>
+<div><h1>SISTEM DATA PERAWATAN SARANA</h1><p>GD &nbsp;•&nbsp; GB &nbsp;•&nbsp; B &nbsp;•&nbsp; Database Google Spreadsheet &nbsp;•&nbsp; Realtime</p></div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -116,46 +132,45 @@ make_public = bool(cfg.get("share_photos_publicly", False))
 df = load_records(ws)
 
 with st.sidebar:
-    st.markdown("## MENU APLIKASI")
-    page = st.radio("Pilih menu", ["Dashboard", "Input Perawatan", "Riwayat Perawatan", "Laporan Otomatis"])
+    st.markdown("### 🚆 MENU APLIKASI")
+    st.caption("Pencatatan pemeriksaan & pemeliharaan sarana")
+    page = st.radio("Pilih menu", ["📊 Dashboard", "📝 Input Perawatan", "📚 Riwayat Perawatan", "📄 Laporan Otomatis"], label_visibility="collapsed")
+    page = page.replace("📊 ","").replace("📝 ","").replace("📚 ","").replace("📄 ","")
     st.divider()
-    st.caption("Sistem pencatatan pemeriksaan dan pemeliharaan sarana")
+    st.caption("KAI • Dipo Induk • Versi Terbaru")
+    st.success("✅ Terhubung ke Google Sheet")
 
 if page == "Dashboard":
-    st.subheader("Dashboard Perawatan")
+    st.subheader("📊 Dashboard Perawatan")
     total = len(df)
     gd_count = int((df["Jenis Sarana"].astype(str).isin(["GD","GB"])).sum()) if total else 0
     b_count = int((df["Jenis Sarana"].astype(str) == "B").sum()) if total else 0
     c1,c2,c3 = st.columns(3)
     c1.metric("Total Data Perawatan", f"{total:,}")
-    c2.metric("Gerbong (GD)", f"{gd_count:,}")
+    c2.metric("Gerbong (GD / GB)", f"{gd_count:,}")
     c3.metric("Bagasi (B)", f"{b_count:,}")
     st.divider()
     if total:
         recent = df.sort_values("Waktu Input", ascending=False).head(10)
-        st.markdown("#### 10 Data Terakhir")
+        st.markdown("#### 🕒 10 Data Terakhir")
         st.dataframe(recent, use_container_width=True, hide_index=True)
         by_type = df["Jenis Perawatan"].replace("", "Tidak diisi").value_counts()
-        st.markdown("#### Data berdasarkan jenis perawatan")
+        st.markdown("#### 📈 Data berdasarkan jenis perawatan")
         st.bar_chart(by_type)
     else:
         st.info("Belum ada data perawatan. Silakan masukkan data melalui menu Input Perawatan.")
 
 elif page == "Input Perawatan":
-    st.subheader("Form Input Pemeriksaan & Pemeliharaan Sarana")
+    st.subheader("📝 Form Input Pemeriksaan & Pemeliharaan Sarana")
     with st.form("form_perawatan", clear_on_submit=True):
-        # --- 1. IDENTITAS SARANA - UDAH DIUBAH SESUAI REQUEST ---
         st.markdown("### 1. Identitas Sarana")
-        # Nomor disamping Jenis Sarana
         a,b = st.columns(2)
         with a: jenis_sarana = st.selectbox("Jenis sarana", ["GD", "GB", "B", "Lainnya"])
-        with b: nomor = st.text_input("Nomor sarana")
-        # Baris ke-2: Mulai Dinas, P24/P48 (Tanggal), Tanggal Perawatan
+        with b: nomor = st.text_input("Nomor sarana", placeholder="Contoh: 421005")
         c,d,e = st.columns(3)
         with c: mulai_dinas = st.date_input("Mulai dinas", value=date.today())
         with d: siklus = st.date_input("P24 / P48", value=date.today(), help="Diisi pake tanggal P24 / P48")
         with e: tanggal = st.date_input("Tanggal pemeriksaan / pemeliharaan", value=date.today())
-        # Baris ke-3: Program + Dipo Induk
         f,g = st.columns(2)
         with f: jenis_perawatan = st.selectbox("Program pemeliharaan", ["P1", "P3", "P6", "P12", "Perbaikan"])
         with g: dipo_induk = st.text_input("Dipo Induk", placeholder="Kosongkan / isi Dipo Induk...")
@@ -165,18 +180,15 @@ elif page == "Input Perawatan":
         with b1: no_bogie1 = st.text_input("Nomor Bogie 1")
         with b2: no_bogie2 = st.text_input("Nomor Bogie 2")
 
-        # --- 3. PENGUKURAN RODA SIMPLE TANPA RANGE ---
         st.markdown("### 3. Pengukuran Roda")
-        # Ukuran langsung ada mm di belakangnya, gak pake kolom sendiri
         uk1, uk2 = st.columns([4,1])
         with uk1: ukuran_roda = st.text_input("Ukuran roda", placeholder="Contoh: 798")
-        with uk2:
-            st.markdown("<div style='padding-top:28px; font-weight:bold;'>mm</div>", unsafe_allow_html=True)
+        with uk2: st.markdown("<div style='padding-top:28px; font-weight:bold;'>mm</div>", unsafe_allow_html=True)
         diameter = {1: [], 2: []}
         flens = {1: [], 2: []}
         bidang = {1: [], 2: []}
         for bogie in [1, 2]:
-            st.markdown(f"#### BOGIE {bogie}")
+            st.markdown(f"#### 🛞 BOGIE {bogie}")
             h0,h1,h2,h3 = st.columns([1,2,2,2])
             with h0: st.caption("RODA")
             with h1: st.caption("Keausan Flens")
@@ -214,11 +226,11 @@ elif page == "Input Perawatan":
         with p5: cd = st.text_input("CD")
         with p6: tekanan_bc = st.text_input("Tekanan BC")
         st.markdown("### 6. Catatan Lain-lain")
-        lainnya = st.text_area("Lain-lain / temuan pemeriksaan", height=180)
+        lainnya = st.text_area("Lain-lain / temuan pemeriksaan", height=120, placeholder="Tulis temuan lainnya di sini...")
         st.markdown("### 7. Dokumentasi Foto")
         p1,p2 = st.columns(2)
-        with p1: foto_sebelum = st.file_uploader("Foto sebelum pemeriksaan", type=["jpg","jpeg","png","webp"], key="foto_sebelum")
-        with p2: foto_sesudah = st.file_uploader("Foto sesudah pemeriksaan", type=["jpg","jpeg","png","webp"], key="foto_sesudah")
+        with p1: foto_sebelum = st.file_uploader("📷 Foto sebelum pemeriksaan", type=["jpg","jpeg","png","webp"], key="foto_sebelum")
+        with p2: foto_sesudah = st.file_uploader("📸 Foto sesudah pemeriksaan", type=["jpg","jpeg","png","webp"], key="foto_sesudah")
         st.markdown("### 8. Petugas dan Informasi Tambahan")
         c,d = st.columns(2)
         with c:
@@ -227,7 +239,7 @@ elif page == "Input Perawatan":
         with d:
             nipp = st.text_input("NIPP")
             keterangan = st.text_area("Keterangan tambahan", height=75)
-        submitted = st.form_submit_button("SIMPAN DATA PEMERIKSAAN", type="primary", use_container_width=True)
+        submitted = st.form_submit_button("💾 SIMPAN DATA PEMERIKSAAN", type="primary", use_container_width=True)
 
     if submitted:
         if not nomor.strip():
@@ -257,13 +269,13 @@ elif page == "Input Perawatan":
                         "Status SO/TSO": status
                     }
                     add_record(ws, record)
-                st.success(f"Data perawatan berhasil disimpan. ID: {record_id}")
+                st.success(f"✅ Data perawatan berhasil disimpan. ID: {record_id}")
                 st.rerun()
             except Exception as e:
                 st.error(f"Gagal menyimpan data: {e}")
 
 elif page == "Riwayat Perawatan":
-    st.subheader("Riwayat Perawatan per Nomor Sarana")
+    st.subheader("📚 Riwayat Perawatan per Nomor Sarana")
     q1,q2 = st.columns([1,2])
     with q1: tipe_filter = st.selectbox("Jenis sarana", ["Semua", "GD", "GB", "B"])
     with q2: nomor_filter = st.text_input("Cari nomor GD / B", placeholder="Contoh: 421005 atau B 12345")
@@ -289,7 +301,7 @@ elif page == "Riwayat Perawatan":
     else: st.info("Data tidak ditemukan.")
 
 elif page == "Laporan Otomatis":
-    st.subheader("Laporan Data Perawatan")
+    st.subheader("📄 Laporan Data Perawatan")
     if df.empty: st.info("Belum ada data untuk dilaporkan.")
     else:
         l,r = st.columns(2)
