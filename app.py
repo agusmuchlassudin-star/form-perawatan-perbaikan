@@ -2,335 +2,467 @@ import streamlit as st
 import pandas as pd
 from datetime import date, datetime
 from io import BytesIO
+from uuid import uuid4
+import re
 import gspread
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
-st.set_page_config(page_title="Sistem Data Perawatan GD dan B", page_icon="train", layout="wide")
-st.markdown('<style>.stApp{background:#071e38 !important} [data-testid="stSidebar"]{background:#04152a !important} [data-testid="stSidebar"] *{color:white !important} .stApp *{color:white !important} .stApp input, .stApp textarea, .stApp select{color:white !important;background:#0f3560 !important;border:1px solid #2a5a8f !important} .stApp input::placeholder, .stApp textarea::placeholder{color:#8fb3d9 !important} div.stButton>button[kind="primary"]{background:#f28c28 !important;border:none;color:white !important;font-weight:800;padding:14px;border-radius:12px;} h3{color:white !important;background:#0f3560;padding:10px 14px;border-radius:10px;border-left:5px solid #f28c28;} h4{color:#ffcf9e !important}</style>', unsafe_allow_html=True)
+st.set_page_config(page_title="Sistem Data Perawatan Sarana", page_icon="🚆", layout="wide", initial_sidebar_state="expanded")
 
-SHEET_HEADERS = [
-    "ID", "Tanggal Perawatan", "Jenis Sarana", "Nomor Sarana", "Jenis Perawatan",
-    "Depo/Lokasi", "Dipo Induk", "Nama Petugas", "NIPP",
-    "Foto Sebelum", "Foto Sesudah", "Keterangan", "Waktu Input",
-    "Mulai Dinas", "Siklus Perawatan", "Nomor Bogie 1", "Nomor Bogie 2",
-    "Ukuran Roda", "Diameter B1 R1", "Diameter B1 R2", "Diameter B1 R3", "Diameter B1 R4",
-    "Diameter B2 R1", "Diameter B2 R2", "Diameter B2 R3", "Diameter B2 R4",
-    "Flens B1 R1", "Flens B1 R2", "Flens B1 R3", "Flens B1 R4",
-    "Flens B2 R1", "Flens B2 R2", "Flens B2 R3", "Flens B2 R4",
-    "Bidang Jalan B1 R1", "Bidang Jalan B1 R2", "Bidang Jalan B1 R3", "Bidang Jalan B1 R4",
-    "Bidang Jalan B2 R1", "Bidang Jalan B2 R2", "Bidang Jalan B2 R3", "Bidang Jalan B2 R4",
-    "Keausan Knuckle Bogie 1", "Keausan Knuckle Bogie 2", "Kelengkapan Emptyload",
-    "Tinggi Boffer", "Brake", "Release", "Langkah Torak", "AC", "CD", "Tekanan BC",
-    "Lain-lain", "Status SO/TSO"
-]
+# --------------------------- KONFIGURASI ---------------------------
 SHEET_NAME = "Data Perawatan"
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets","https://www.googleapis.com/auth/drive"]
+LOG_SHEET_NAME = "Log Aktivitas"
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+]
+FLEET_TOTAL = 582  # Angka populasi referensi dari pengguna, bukan jumlah transaksi.
+FLEET_GERBONG = 527
+FLEET_BAGASI = 55
+MAX_PHOTO_MB = 10
 
+HEADERS = [
+    "ID", "Tanggal Perawatan", "Jenis Sarana", "Nomor Sarana", "Mulai Dinas",
+    "Siklus Pemeriksaan", "Program Pemeliharaan", "Depo/Lokasi", "Nomor Bogie 1", "Nomor Bogie 2",
+    "Diameter B1 R1", "Flens B1 R1", "Bidang Jalan B1 R1",
+    "Diameter B1 R2", "Flens B1 R2", "Bidang Jalan B1 R2",
+    "Diameter B1 R3", "Flens B1 R3", "Bidang Jalan B1 R3",
+    "Diameter B1 R4", "Flens B1 R4", "Bidang Jalan B1 R4",
+    "Diameter B2 R1", "Flens B2 R1", "Bidang Jalan B2 R1",
+    "Diameter B2 R2", "Flens B2 R2", "Bidang Jalan B2 R2",
+    "Diameter B2 R3", "Flens B2 R3", "Bidang Jalan B2 R3",
+    "Diameter B2 R4", "Flens B2 R4", "Bidang Jalan B2 R4",
+    "Keausan Knuckle Bogie 1", "Keausan Knuckle Bogie 2", "Kelengkapan Emptyload", "Tinggi Boffer",
+    "Brake", "Release", "Langkah Torak", "AC", "CD", "Tekanan BC",
+    "Komponen", "Jenis Pekerjaan", "Kondisi Sebelum", "Tindakan Perawatan", "Kondisi Sesudah",
+    "Lain-lain", "Status SO/TSO", "Nama Petugas", "NIPP", "Foto Sebelum", "Foto Sesudah",
+    "Keterangan", "Waktu Input", "Dibuat Oleh",
+]
+PROGRAMS = ["P1", "P3", "P6", "P12", "Perbaikan"]
+TYPES = ["GD", "GB", "B", "Lainnya"]
+
+# --------------------------- TEMA ---------------------------
+st.markdown("""
+<style>
+:root { color-scheme: dark; }
+.stApp { background: #071827; color: #edf4fb; }
+[data-testid="stHeader"] { background: rgba(7,24,39,.92); }
+[data-testid="stSidebar"] { background: linear-gradient(180deg,#0b2945,#071827); border-right:1px solid #234461; }
+[data-testid="stSidebar"] * { color:#edf4fb !important; }
+.block-container { padding-top: 1.3rem; padding-bottom: 2rem; max-width: 1500px; }
+.hero { background:linear-gradient(115deg,#0d3152 0%,#14578a 62%,#e87518 100%); border:1px solid #376b91; padding:24px 28px; border-radius:18px; margin-bottom:18px; box-shadow:0 10px 30px rgba(0,0,0,.22); }
+.hero h1 { color:white !important; font-size:clamp(24px,3vw,36px); margin:0; font-weight:850; }
+.hero p { color:#e6f1fb !important; margin:7px 0 0 0; }
+.section-card { background:#10283d; border:1px solid #294760; border-radius:14px; padding:15px 17px; }
+.kpi { background:linear-gradient(145deg,#102b43,#0d2236); border:1px solid #2b4d68; border-top:4px solid #f28c28; border-radius:15px; padding:15px 17px; min-height:112px; }
+.kpi .label { color:#a9c1d5; font-size:13px; font-weight:650; }
+.kpi .value { color:#fff; font-size:30px; font-weight:850; margin-top:5px; }
+.kpi .note { color:#91a9bd; font-size:11px; margin-top:2px; }
+div[data-testid="stMetric"] { background:#10283d; border:1px solid #294760; border-radius:13px; padding:12px 14px; }
+div[data-testid="stMetric"] label, div[data-testid="stMetric"] [data-testid="stMetricValue"] { color:#f4f8fc !important; }
+.stButton>button, .stDownloadButton>button { background:#ef8125; color:white; border:0; border-radius:9px; font-weight:700; }
+.stButton>button:hover, .stDownloadButton>button:hover { background:#ff9b43; color:white; border:0; }
+input, textarea, [data-baseweb="select"] > div { background-color:#f8fbff !important; color:#12283b !important; border-radius:7px !important; }
+label, .stMarkdown, p, h1, h2, h3, h4 { color:#edf4fb; }
+[data-testid="stDataFrame"] { border:1px solid #294760; border-radius:10px; }
+[data-testid="stExpander"] { background:#10283d; border:1px solid #294760; border-radius:10px; }
+hr { border-color:#294760; }
+.small-muted { color:#9bb2c5; font-size:12px; }
+</style>
+<div class="hero"><h1>🚆 SISTEM DATA PERAWATAN SARANA</h1><p>Pengelolaan pemeriksaan dan pemeliharaan GD · GB · B · Lainnya | Database Google Spreadsheet & dokumentasi Google Drive</p></div>
+""", unsafe_allow_html=True)
+
+# --------------------------- GOOGLE CONNECT ---------------------------
 def get_config():
     if "gcp_service_account" not in st.secrets:
-        st.error("Konfigurasi Google belum ditemukan.")
+        st.error("Konfigurasi Google belum tersedia. Ikuti petunjuk pada README untuk mengisi .streamlit/secrets.toml.")
         st.stop()
     return st.secrets
 
-@st.cache_resource
+@st.cache_resource(show_spinner="Menghubungkan ke Google...")
 def connect_google():
     cfg = get_config()
-    credentials = Credentials.from_service_account_info(dict(cfg["gcp_service_account"]), scopes=SCOPES)
-    gc = gspread.authorize(credentials)
-    spreadsheet_id = cfg.get("spreadsheet_id", "")
+    creds = Credentials.from_service_account_info(dict(cfg["gcp_service_account"]), scopes=SCOPES)
+    gc = gspread.authorize(creds)
+    spreadsheet_id = str(cfg.get("spreadsheet_id", "")).strip()
     if not spreadsheet_id:
-        st.error("Isi spreadsheet_id pada secrets.toml.")
-        st.stop()
+        raise ValueError("spreadsheet_id belum diisi pada secrets.toml")
     sh = gc.open_by_key(spreadsheet_id)
     try:
         ws = sh.worksheet(SHEET_NAME)
     except gspread.WorksheetNotFound:
-        ws = sh.add_worksheet(title=SHEET_NAME, rows=2000, cols=len(SHEET_HEADERS))
-        ws.append_row(SHEET_HEADERS)
-    existing_headers = ws.row_values(1)
-    if not existing_headers:
-        ws.resize(cols=len(SHEET_HEADERS))
-        ws.append_row(SHEET_HEADERS)
+        ws = sh.add_worksheet(title=SHEET_NAME, rows=3000, cols=max(HEADERS.__len__(), 60))
+    existing = ws.row_values(1)
+    if not existing:
+        ws.resize(rows=max(ws.row_count, 3000), cols=max(ws.col_count, len(HEADERS)))
+        ws.update(range_name="A1", values=[HEADERS])
+        existing = HEADERS.copy()
     else:
-        missing_headers = [h for h in SHEET_HEADERS if h not in existing_headers]
-        if missing_headers:
-            updated_headers = existing_headers + missing_headers
-            ws.resize(cols=max(len(updated_headers), ws.col_count))
-            ws.update(range_name=f'A1:{gspread.utils.rowcol_to_a1(1, len(updated_headers))}', values=[updated_headers])
-    drive = build("drive", "v3", credentials=credentials, cache_discovery=False)
-    return sh, ws, drive, cfg
+        missing = [h for h in HEADERS if h not in existing]
+        if missing:
+            updated = existing + missing
+            ws.resize(cols=max(ws.col_count, len(updated)))
+            ws.update(range_name="A1", values=[updated])
+            existing = updated
+    # Sheet log untuk jejak input; dibuat terpisah agar data utama tetap utuh.
+    log_headers = ["Waktu", "ID Data", "Aktivitas", "Pengguna", "Nomor Sarana", "Keterangan"]
+    try:
+        log_ws = sh.worksheet(LOG_SHEET_NAME)
+    except gspread.WorksheetNotFound:
+        log_ws = sh.add_worksheet(title=LOG_SHEET_NAME, rows=3000, cols=len(log_headers))
+    if not log_ws.row_values(1):
+        log_ws.update(range_name="A1", values=[log_headers])
+    drive = build("drive", "v3", credentials=creds, cache_discovery=False)
+    return sh, ws, log_ws, drive, cfg, existing
 
-def upload_photo(drive, uploaded_file, folder_id, filename, make_public=False):
-    if uploaded_file is None:
+def upload_photo(drive, uploaded, folder_id, filename, make_public=False):
+    if uploaded is None:
         return ""
+    if uploaded.size > MAX_PHOTO_MB * 1024 * 1024:
+        raise ValueError(f"Ukuran foto {uploaded.name} melebihi {MAX_PHOTO_MB} MB.")
     metadata = {"name": filename}
     if folder_id:
         metadata["parents"] = [folder_id]
-    media = MediaIoBaseUpload(BytesIO(uploaded_file.getvalue()), mimetype=uploaded_file.type or "application/octet-stream", resumable=True)
+    media = MediaIoBaseUpload(BytesIO(uploaded.getvalue()), mimetype=uploaded.type or "image/jpeg", resumable=True)
     result = drive.files().create(body=metadata, media_body=media, fields="id,webViewLink").execute()
     if make_public:
-        drive.permissions().create(fileId=result["id"], body={"type":"anyone","role":"reader"}, fields="id").execute()
+        drive.permissions().create(fileId=result["id"], body={"type":"anyone", "role":"reader"}, fields="id").execute()
     return result.get("webViewLink", f"https://drive.google.com/file/d/{result['id']}/view")
 
-@st.cache_data(ttl=60)
-def load_records(_ws):
-    values = _ws.get_all_records()
-    if not values:
-        return pd.DataFrame(columns=SHEET_HEADERS)
-    df = pd.DataFrame(values)
-    for col in SHEET_HEADERS:
+def load_records(ws):
+    rows = ws.get_all_records()
+    if not rows:
+        return pd.DataFrame(columns=HEADERS)
+    df = pd.DataFrame(rows).fillna("")
+    for col in HEADERS:
         if col not in df.columns:
             df[col] = ""
-    return df[SHEET_HEADERS]
+    return df
 
-def make_id():
-    return datetime.now().strftime("PRW%Y%m%d%H%M%S%f")
+def append_record(ws, record, sheet_headers):
+    # PENTING: gunakan urutan header aktual di Google Sheet agar data lama tidak bergeser.
+    ws.append_row([record.get(h, "") for h in sheet_headers], value_input_option="RAW")
 
-def add_record(ws, record):
-    ws.append_row([record.get(h, "") for h in SHEET_HEADERS], value_input_option="USER_ENTERED")
-    st.cache_data.clear()
+def log_activity(log_ws, record_id, activity, user, nomor, note=""):
+    log_ws.append_row([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), record_id, activity, user, nomor, note], value_input_option="RAW")
 
-st.markdown('<div style="background:#04152a;padding:22px 26px;border-radius:15px;color:white;border:1px solid #2a5a8f;"><h1 style="color:white;margin:0;font-size:28px;">SISTEM DATA PERAWATAN SARANA</h1><p style="color:#dbeafe;margin:6px 0 0 0;">GD - GB - B - Database Google Spreadsheet</p></div>', unsafe_allow_html=True)
+def clean_text(value):
+    return str(value or "").strip()
 
+def fmt_date(value):
+    d = pd.to_datetime(value, errors="coerce")
+    return "" if pd.isna(d) else d.strftime("%Y-%m-%d")
+
+def make_excel(frame):
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        frame.to_excel(writer, index=False, sheet_name="Data Perawatan")
+        wsx = writer.sheets["Data Perawatan"]
+        wsx.freeze_panes = "A2"
+        wsx.auto_filter.ref = wsx.dimensions
+        for col in wsx.columns:
+            width = min(max(max(len(str(c.value or "")) for c in col) + 2, 12), 34)
+            wsx.column_dimensions[col[0].column_letter].width = width
+    return buf.getvalue()
+
+# --------------------------- LOAD DATA ---------------------------
 try:
-    sh, ws, drive, cfg = connect_google()
-except Exception as e:
-    st.error(f"Gagal terhubung ke Google: {e}")
+    sh, ws, log_ws, drive, cfg, actual_headers = connect_google()
+    df = load_records(ws)
+except Exception as exc:
+    st.error(f"Tidak berhasil terhubung atau membaca Google Spreadsheet: {exc}")
+    st.info("Periksa Spreadsheet ID, izin berbagi kepada email service account, Google Sheets API, dan Google Drive API.")
     st.stop()
 
-folder_id = str(cfg.get("drive_folder_id", "")).strip()
+folder_id = clean_text(cfg.get("drive_folder_id", ""))
 make_public = bool(cfg.get("share_photos_publicly", False))
-df = load_records(ws)
+user_label = clean_text(cfg.get("nama_pengguna", "Petugas aplikasi")) or "Petugas aplikasi"
 
 with st.sidebar:
-    st.markdown("### MENU APLIKASI")
-    st.caption("Pencatatan pemeriksaan dan pemeliharaan sarana")
-    page = st.radio("Pilih menu", ["Dashboard", "Input Perawatan", "Riwayat Perawatan", "Laporan Otomatis"])
+    st.markdown("## 🚆 MENU UTAMA")
+    page = st.radio("Pilih halaman", ["Dashboard", "Input Perawatan", "Riwayat Perawatan", "Laporan Otomatis"], label_visibility="collapsed")
     st.divider()
-    st.caption("KAI - Dipo Induk - Versi Terbaru")
-    st.success("Terhubung ke Google Sheet")
+    st.markdown("**Depo Gerbong Jakarta Gudang**")
+    st.caption("Sistem pencatatan pemeriksaan dan pemeliharaan sarana")
+    st.caption(f"Pengguna: {user_label}")
+    st.divider()
+    st.caption("Tips: gunakan nomor sarana yang konsisten agar pencarian riwayat lebih akurat.")
 
+# --------------------------- DASHBOARD ---------------------------
 if page == "Dashboard":
-    st.subheader("Dashboard Perawatan")
-    total = len(df)
-    gd_count = int((df["Jenis Sarana"].astype(str).isin(["GD","GB"])).sum()) if total else 0
-    b_count = int((df["Jenis Sarana"].astype(str) == "B").sum()) if total else 0
-    st.markdown('<style>.stats-container{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin:15px 0 25px 0} .stat-card{position:relative;overflow:hidden;background:linear-gradient(135deg,#142c48,#1b4268);border:1px solid rgba(255,255,255,0.10);border-radius:18px;padding:25px;box-shadow:0 8px 25px rgba(0,0,0,0.25)} .stat-card.orange{background:linear-gradient(135deg,#a94f13,#f28c28)} .stat-card.blue{background:linear-gradient(135deg,#102d50,#1769aa)} .stat-card.green{background:linear-gradient(135deg,#124b4a,#16877b)} .stat-label{color:#d8e5f3;font-size:14px;font-weight:600;letter-spacing:1px;text-transform:uppercase} .stat-number{color:white;font-size:42px;font-weight:800;margin:12px 0 5px 0} .stat-description{color:#dbeafe;font-size:12px} .stat-icon{position:absolute;right:22px;top:22px;font-size:38px;opacity:0.85} .stat-line{width:45px;height:4px;background:#f28c28;border-radius:5px;margin-top:14px}</style>' + f'<div class="stats-container"><div class="stat-card blue"><div class="stat-icon">GD</div><div class="stat-label">Total Sarana</div><div class="stat-number">{total}</div><div class="stat-description">Total keseluruhan sarana</div><div class="stat-line"></div></div><div class="stat-card orange"><div class="stat-icon">GB</div><div class="stat-label">Gerbong GD / GB</div><div class="stat-number">{gd_count}</div><div class="stat-description">Jumlah sarana gerbong</div><div class="stat-line" style="background:white;"></div></div><div class="stat-card green"><div class="stat-icon">B</div><div class="stat-label">Bagasi B</div><div class="stat-number">{b_count}</div><div class="stat-description">Jumlah sarana bagasi</div><div class="stat-line" style="background:#a7f3d0;"></div></div></div>', unsafe_allow_html=True)
-    st.divider()
-    if total:
-        recent = df.sort_values("Waktu Input", ascending=False).head(10)
-        st.markdown("#### 10 Data Terakhir")
-        st.dataframe(recent, use_container_width=True, hide_index=True)
-        by_type = df["Jenis Perawatan"].replace("", "Tidak diisi").value_counts()
-        st.markdown("#### Data berdasarkan jenis perawatan")
-        st.bar_chart(by_type)
+    st.subheader("Dashboard Monitoring Perawatan")
+    total_record = len(df)
+    if total_record:
+        dates = pd.to_datetime(df["Tanggal Perawatan"], errors="coerce")
+        this_month = int(((dates.dt.year == date.today().year) & (dates.dt.month == date.today().month)).sum())
+        so_count = int((df["Status SO/TSO"].astype(str).str.upper() == "SO").sum())
+        tso_count = int((df["Status SO/TSO"].astype(str).str.upper() == "TSO").sum())
     else:
-        st.info("Belum ada data perawatan. Silakan masukkan data melalui menu Input Perawatan.")
+        this_month = so_count = tso_count = 0
+    k1,k2,k3,k4 = st.columns(4)
+    for col, label, value, note in [
+        (k1,"Total Populasi Sarana",FLEET_TOTAL,"Angka referensi populasi"),
+        (k2,"Gerbong",FLEET_GERBONG,"Angka referensi gerbong"),
+        (k3,"Bagasi",FLEET_BAGASI,"Angka referensi bagasi"),
+        (k4,"Catatan Perawatan",total_record,"Jumlah transaksi tersimpan"),
+    ]:
+        col.markdown(f'<div class="kpi"><div class="label">{label}</div><div class="value">{value:,}</div><div class="note">{note}</div></div>', unsafe_allow_html=True)
+    st.caption("Angka populasi 582 / 527 / 55 adalah angka referensi, bukan jumlah transaksi perawatan.")
+    st.divider()
+    a,b,c = st.columns(3)
+    a.metric("Perawatan Bulan Ini", f"{this_month:,}")
+    b.metric("Status SO", f"{so_count:,}")
+    c.metric("Status TSO", f"{tso_count:,}")
+    if total_record:
+        left,right = st.columns([1,1])
+        with left:
+            st.markdown("#### Catatan berdasarkan program")
+            prog = df["Program Pemeliharaan"].replace("", "Belum diisi").value_counts()
+            st.bar_chart(prog)
+        with right:
+            st.markdown("#### Catatan berdasarkan jenis sarana")
+            typ = df["Jenis Sarana"].replace("", "Belum diisi").value_counts()
+            st.bar_chart(typ)
+        st.markdown("#### 10 catatan terbaru")
+        recent = df.copy()
+        recent["_sort"] = pd.to_datetime(recent["Waktu Input"], errors="coerce")
+        recent = recent.sort_values("_sort", ascending=False).drop(columns="_sort").head(10)
+        show_cols = [c for c in ["Tanggal Perawatan","Jenis Sarana","Nomor Sarana","Program Pemeliharaan","Depo/Lokasi","Status SO/TSO","Nama Petugas"] if c in recent]
+        st.dataframe(recent[show_cols], use_container_width=True, hide_index=True)
+    else:
+        st.info("Belum ada catatan perawatan. Mulai dengan menu Input Perawatan.")
 
+# --------------------------- INPUT ---------------------------
 elif page == "Input Perawatan":
-    st.subheader("Form Input Pemeriksaan dan Pemeliharaan Sarana")
-    with st.form("form_perawatan", clear_on_submit=True):
-        st.markdown("### 1. Identitas Sarana")
-        a,b = st.columns(2)
-        with a:
-            jenis_sarana = st.selectbox("Jenis sarana", ["GD", "GB", "B", "Lainnya"])
-        with b:
-            nomor = st.text_input("Nomor sarana", placeholder="Contoh: 421005")
-        c,d,e = st.columns(3)
-        with c:
+    st.subheader("Input Pemeriksaan & Pemeliharaan Sarana")
+    st.caption("Isi sesuai hasil pemeriksaan aktual. Pengukuran roda dibuat ringkas dalam tabel per bogie.")
+    with st.form("form_perawatan_v3", clear_on_submit=True):
+        st.markdown("### 1. Identitas sarana")
+        c1,c2,c3 = st.columns(3)
+        with c1:
+            jenis_sarana = st.selectbox("Jenis sarana *", TYPES)
+            jenis_lain = st.text_input("Jenis sarana lainnya", placeholder="Isi jika memilih Lainnya")
+            nomor = st.text_input("Nomor sarana *", placeholder="Contoh: GD 421005")
+        with c2:
             mulai_dinas = st.date_input("Mulai dinas", value=date.today())
-        with d:
-            siklus = st.date_input("P24 / P48", value=date.today(), help="Diisi pake tanggal P24 / P48")
-        with e:
-            tanggal = st.date_input("Tanggal pemeriksaan / pemeliharaan", value=date.today())
-        f,g = st.columns(2)
-        with f:
-            jenis_perawatan = st.selectbox("Program pemeliharaan", ["P1", "P3", "P6", "P12", "Perbaikan"])
-        with g:
-            dipo_induk = st.text_input("Dipo Induk", placeholder="Kosongkan / isi Dipo Induk...")
-        st.markdown("### 2. Identitas Bogie")
+            siklus = st.selectbox("Siklus pemeriksaan", ["P24", "P48"])
+        with c3:
+            tanggal = st.date_input("Tanggal pemeriksaan / perawatan", value=date.today())
+            program = st.selectbox("Program pemeliharaan *", PROGRAMS)
+        lokasi = st.text_input("Depo / lokasi pemeriksaan", placeholder="Contoh: Depo Gerbong Jakarta Gudang")
+        st.markdown("### 2. Identitas bogie")
         b1,b2 = st.columns(2)
-        with b1:
-            no_bogie1 = st.text_input("Nomor Bogie 1")
-        with b2:
-            no_bogie2 = st.text_input("Nomor Bogie 2")
-        st.markdown("### 3. Pengukuran Roda")
-        uk1, uk2 = st.columns([4,1])
-        with uk1:
-            ukuran_roda = st.text_input("Ukuran roda", placeholder="Contoh: 798")
-        with uk2:
-            st.markdown('<div style="padding-top:28px;font-weight:bold;">mm</div>', unsafe_allow_html=True)
-        diameter = {1: [], 2: []}
-        flens = {1: [], 2: []}
-        bidang = {1: [], 2: []}
-        for bogie in [1, 2]:
-            st.markdown(f"#### BOGIE {bogie}")
-            h0,h1,h2,h3 = st.columns([1,2,2,2])
-            with h0:
-                st.caption("RODA")
-            with h1:
-                st.caption("Keausan Flens")
-            with h2:
-                st.caption("Tinggi Flens")
-            with h3:
-                st.caption("Diameter")
-            for roda in range(1,5):
-                c0,c1,c2,c3 = st.columns([1,2,2,2])
-                with c0:
-                    st.markdown(f"**Roda {roda}**")
-                with c1:
-                    v1 = st.text_input(f"Keausan B{bogie} R{roda}", key=f"keausan_b{bogie}_r{roda}_v4", label_visibility="collapsed", placeholder="0.0")
-                    flens[bogie].append(v1)
-                with c2:
-                    v2 = st.text_input(f"Tinggi B{bogie} R{roda}", key=f"tinggi_b{bogie}_r{roda}_v4", label_visibility="collapsed", placeholder="0.0")
-                    bidang[bogie].append(v2)
-                with c3:
-                    v3 = st.text_input(f"Diameter B{bogie} R{roda}", key=f"diam_b{bogie}_r{roda}_v4", label_visibility="collapsed", placeholder="0")
-                    diameter[bogie].append(v3)
-        st.markdown("### 4. Pemeriksaan Komponen dan Kelengkapan")
-        k1,k2 = st.columns(2)
-        with k1:
+        with b1: no_bogie1 = st.text_input("Nomor Bogie 1")
+        with b2: no_bogie2 = st.text_input("Nomor Bogie 2")
+        st.markdown("### 3. Pengukuran roda")
+        st.caption("Isi angka beserta satuan bila diperlukan. Kosongkan kolom jika tidak dilakukan pengukuran.")
+        wheel_tables = {}
+        for bogie_num in (1,2):
+            st.markdown(f"**Bogie {bogie_num}**")
+            initial = pd.DataFrame({"Roda": ["Roda 1","Roda 2","Roda 3","Roda 4"], "Diameter": ["","","",""], "Flens": ["","","",""], "Bidang Jalan": ["","","",""]})
+            wheel_tables[bogie_num] = st.data_editor(
+                initial, key=f"wheel_table_{bogie_num}", use_container_width=True, hide_index=True,
+                disabled=["Roda"], num_rows="fixed", column_config={
+                    "Roda": st.column_config.TextColumn("Posisi roda", width="small"),
+                    "Diameter": st.column_config.TextColumn("Diameter", help="Isi hasil ukur diameter roda"),
+                    "Flens": st.column_config.TextColumn("Flens", help="Isi hasil ukur flens"),
+                    "Bidang Jalan": st.column_config.TextColumn("Bidang jalan", help="Isi hasil ukur bidang jalan"),
+                })
+        st.markdown("### 4. Pemeriksaan komponen")
+        c1,c2,c3 = st.columns(3)
+        with c1:
             knuckle1 = st.text_input("Keausan knuckle Bogie 1")
-            emptyload = st.selectbox("Kelengkapan emptyload", ["Ada", "Tidak ada"])
-            tinggi_boffer = st.text_input("Tinggi boffer")
-        with k2:
             knuckle2 = st.text_input("Keausan knuckle Bogie 2")
-            status = st.selectbox("Status sarana", ["SO", "TSO"])
-        st.markdown("### 5. Pemeriksaan Pengereman")
+        with c2:
+            emptyload = st.selectbox("Kelengkapan emptyload", ["Belum diperiksa", "Ada", "Tidak ada", "Tidak berlaku"])
+            boffer = st.text_input("Tinggi boffer")
+        with c3:
+            status = st.selectbox("Status sarana", ["SO", "TSO", "Belum ditentukan"])
+            komponen = st.text_input("Komponen yang diperiksa")
+        st.markdown("### 5. Pemeriksaan pengereman dan tekanan")
         p1,p2,p3 = st.columns(3)
-        with p1:
-            brake = st.text_input("Brake")
-        with p2:
-            release = st.text_input("Release")
-        with p3:
-            langkah_torak = st.text_input("Langkah torak")
+        with p1: brake = st.text_input("Brake")
+        with p2: release = st.text_input("Release")
+        with p3: torak = st.text_input("Langkah torak")
         p4,p5,p6 = st.columns(3)
-        with p4:
-            ac = st.text_input("AC")
-        with p5:
-            cd = st.text_input("CD")
-        with p6:
-            tekanan_bc = st.text_input("Tekanan BC")
-        st.markdown("### 6. Catatan Lain-lain")
-        lainnya = st.text_area("Lain-lain / temuan pemeriksaan", height=120, placeholder="Tulis temuan lainnya di sini...")
-        st.markdown("### 7. Dokumentasi Foto")
-        p1,p2 = st.columns(2)
-        with p1:
-            foto_sebelum = st.file_uploader("Foto sebelum pemeriksaan", type=["jpg","jpeg","png","webp"], key="foto_sebelum")
-        with p2:
-            foto_sesudah = st.file_uploader("Foto sesudah pemeriksaan", type=["jpg","jpeg","png","webp"], key="foto_sesudah")
-        st.markdown("### 8. Petugas dan Informasi Tambahan")
-        c,d = st.columns(2)
-        with c:
-            lokasi = st.text_input("Depo / lokasi")
-            petugas = st.text_input("Nama petugas / teknisi")
-        with d:
-            nipp = st.text_input("NIPP")
-            keterangan = st.text_area("Keterangan tambahan", height=75)
-        submitted = st.form_submit_button("SIMPAN DATA PEMERIKSAAN", type="primary", use_container_width=True)
-    if submitted:
-        if not nomor.strip():
-            st.error("Nomor sarana wajib diisi.")
-        else:
-            try:
-                record_id = make_id()
-                with st.spinner("Mengunggah foto dan menyimpan data..."):
-                    foto1 = upload_photo(drive, foto_sebelum, folder_id, f"{record_id}_sebelum_{foto_sebelum.name}" if foto_sebelum else "", make_public) if foto_sebelum else ""
-                    foto2 = upload_photo(drive, foto_sesudah, folder_id, f"{record_id}_sesudah_{foto_sesudah.name}" if foto_sesudah else "", make_public) if foto_sesudah else ""
-                    record = {
-                        "ID": record_id, "Tanggal Perawatan": tanggal.strftime("%Y-%m-%d"),
-                        "Jenis Sarana": jenis_sarana, "Nomor Sarana": nomor.strip().upper(),
-                        "Jenis Perawatan": jenis_perawatan, "Depo/Lokasi": lokasi, "Dipo Induk": dipo_induk,
-                        "Nama Petugas": petugas, "NIPP": nipp,
-                        "Foto Sebelum": foto1, "Foto Sesudah": foto2,
-                        "Keterangan": keterangan, "Waktu Input": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "Mulai Dinas": mulai_dinas.strftime("%Y-%m-%d"), "Siklus Perawatan": siklus.strftime("%Y-%m-%d"),
-                        "Nomor Bogie 1": no_bogie1, "Nomor Bogie 2": no_bogie2, "Ukuran Roda": ukuran_roda,
-                        **{f"Diameter B{b} R{r+1}": diameter[b][r] for b in (1,2) for r in range(4)},
-                        **{f"Flens B{b} R{r+1}": flens[b][r] for b in (1,2) for r in range(4)},
-                        **{f"Bidang Jalan B{b} R{r+1}": bidang[b][r] for b in (1,2) for r in range(4)},
-                        "Keausan Knuckle Bogie 1": knuckle1, "Keausan Knuckle Bogie 2": knuckle2,
-                        "Kelengkapan Emptyload": emptyload, "Tinggi Boffer": tinggi_boffer,
-                        "Brake": brake, "Release": release, "Langkah Torak": langkah_torak,
-                        "AC": ac, "CD": cd, "Tekanan BC": tekanan_bc, "Lain-lain": lainnya,
-                        "Status SO/TSO": status
-                    }
-                    add_record(ws, record)
-                st.success(f"Data perawatan berhasil disimpan. ID: {record_id}")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Gagal menyimpan data: {e}")
+        with p4: ac = st.text_input("AC")
+        with p5: cd = st.text_input("CD")
+        with p6: bc = st.text_input("Tekanan BC")
+        st.markdown("### 6. Temuan dan tindakan perawatan")
+        pekerjaan = st.text_input("Jenis pekerjaan")
+        d1,d2 = st.columns(2)
+        with d1:
+            sebelum = st.text_area("Kondisi sebelum", height=100)
+            tindakan = st.text_area("Tindakan perawatan", height=130)
+        with d2:
+            sesudah = st.text_area("Kondisi sesudah", height=100)
+            lainnya = st.text_area("Lain-lain / temuan pemeriksaan", height=130)
+        keterangan = st.text_area("Keterangan tambahan", height=80)
+        st.markdown("### 7. Dokumentasi foto")
+        f1,f2 = st.columns(2)
+        with f1: foto_sebelum = st.file_uploader("Foto sebelum", type=["jpg","jpeg","png","webp"], key="upload_before", help=f"Maksimal {MAX_PHOTO_MB} MB per foto")
+        with f2: foto_sesudah = st.file_uploader("Foto sesudah", type=["jpg","jpeg","png","webp"], key="upload_after", help=f"Maksimal {MAX_PHOTO_MB} MB per foto")
+        st.markdown("### 8. Petugas")
+        t1,t2 = st.columns(2)
+        with t1: petugas = st.text_input("Nama petugas / teknisi")
+        with t2: nipp = st.text_input("NIPP")
+        submitted = st.form_submit_button("💾 SIMPAN DATA PERAWATAN", type="primary", use_container_width=True)
 
+    if submitted:
+        errors = []
+        if not clean_text(nomor): errors.append("Nomor sarana wajib diisi.")
+        if jenis_sarana == "Lainnya" and not clean_text(jenis_lain): errors.append("Jenis sarana lainnya wajib diisi.")
+        if foto_sebelum and foto_sebelum.size > MAX_PHOTO_MB*1024*1024: errors.append(f"Foto sebelum melebihi {MAX_PHOTO_MB} MB.")
+        if foto_sesudah and foto_sesudah.size > MAX_PHOTO_MB*1024*1024: errors.append(f"Foto sesudah melebihi {MAX_PHOTO_MB} MB.")
+        if errors:
+            for e in errors: st.error(e)
+        else:
+            record_id = "PRW-" + datetime.now().strftime("%Y%m%d-%H%M%S-") + uuid4().hex[:6].upper()
+            jenis_final = clean_text(jenis_lain) if jenis_sarana == "Lainnya" else jenis_sarana
+            record = {h:"" for h in HEADERS}
+            record.update({
+                "ID":record_id, "Tanggal Perawatan":tanggal.isoformat(), "Jenis Sarana":jenis_final,
+                "Nomor Sarana":clean_text(nomor).upper(), "Mulai Dinas":mulai_dinas.isoformat(),
+                "Siklus Pemeriksaan":siklus, "Program Pemeliharaan":program, "Depo/Lokasi":clean_text(lokasi),
+                "Nomor Bogie 1":clean_text(no_bogie1), "Nomor Bogie 2":clean_text(no_bogie2),
+                "Keausan Knuckle Bogie 1":clean_text(knuckle1), "Keausan Knuckle Bogie 2":clean_text(knuckle2),
+                "Kelengkapan Emptyload":emptyload, "Tinggi Boffer":clean_text(boffer),
+                "Brake":clean_text(brake), "Release":clean_text(release), "Langkah Torak":clean_text(torak),
+                "AC":clean_text(ac), "CD":clean_text(cd), "Tekanan BC":clean_text(bc),
+                "Komponen":clean_text(komponen), "Jenis Pekerjaan":clean_text(pekerjaan),
+                "Kondisi Sebelum":clean_text(sebelum), "Tindakan Perawatan":clean_text(tindakan),
+                "Kondisi Sesudah":clean_text(sesudah), "Lain-lain":clean_text(lainnya),
+                "Status SO/TSO":status, "Nama Petugas":clean_text(petugas), "NIPP":clean_text(nipp),
+                "Keterangan":clean_text(keterangan), "Waktu Input":datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "Dibuat Oleh":user_label,
+            })
+            for bn, table in wheel_tables.items():
+                for _, row in table.iterrows():
+                    match = re.search(r"(\d+)$", str(row["Roda"]))
+                    if not match: continue
+                    rn = int(match.group(1))
+                    for field in ["Diameter", "Flens", "Bidang Jalan"]:
+                        record[f"{field} B{bn} R{rn}"] = clean_text(row[field])
+            try:
+                with st.spinner("Mengunggah dokumentasi dan menyimpan data ke Google Spreadsheet..."):
+                    if foto_sebelum:
+                        record["Foto Sebelum"] = upload_photo(drive, foto_sebelum, folder_id, f"{record_id}_SEBELUM_{foto_sebelum.name}", make_public)
+                    if foto_sesudah:
+                        record["Foto Sesudah"] = upload_photo(drive, foto_sesudah, folder_id, f"{record_id}_SESUDAH_{foto_sesudah.name}", make_public)
+                    append_record(ws, record, actual_headers)
+                    log_activity(log_ws, record_id, "INPUT", user_label, record["Nomor Sarana"], f"Program {program} / {status}")
+                st.success(f"Data berhasil disimpan. Nomor referensi: {record_id}")
+                st.rerun()
+            except Exception as exc:
+                st.error(f"Penyimpanan belum berhasil: {exc}")
+                st.warning("Jika foto sudah terunggah tetapi penyimpanan baris gagal, periksa folder Google Drive agar tidak ada file foto yatim.")
+
+# --------------------------- HISTORY ---------------------------
 elif page == "Riwayat Perawatan":
     st.subheader("Riwayat Perawatan per Nomor Sarana")
-    q1,q2 = st.columns([1,2])
-    with q1:
-        tipe_filter = st.selectbox("Jenis sarana", ["Semua", "GD", "GB", "B"])
-    with q2:
-        nomor_filter = st.text_input("Cari nomor GD / B", placeholder="Contoh: 421005 atau B 12345")
-    filtered = df.copy()
-    if tipe_filter != "Semua":
-        filtered = filtered[filtered["Jenis Sarana"].astype(str) == tipe_filter]
-    if nomor_filter.strip():
-        filtered = filtered[filtered["Nomor Sarana"].astype(str).str.contains(nomor_filter.strip(), case=False, na=False)]
-    st.caption(f"Ditemukan {len(filtered)} catatan perawatan")
-    if len(filtered):
-        filtered = filtered.sort_values("Tanggal Perawatan", ascending=False)
-        st.dataframe(filtered, use_container_width=True, hide_index=True, column_config={"Foto Sebelum": st.column_config.LinkColumn("Foto Sebelum"), "Foto Sesudah": st.column_config.LinkColumn("Foto Sesudah")})
-        pilihan = st.selectbox("Lihat detail nomor sarana", ["-- Pilih --"] + sorted(filtered["Nomor Sarana"].astype(str).unique().tolist()))
-        if pilihan != "-- Pilih --":
-            detail = filtered[filtered["Nomor Sarana"].astype(str) == pilihan].sort_values("Tanggal Perawatan", ascending=False)
-            st.markdown(f"#### Riwayat {pilihan}")
-            for _, r in detail.iterrows():
-                with st.expander(f"{r['Tanggal Perawatan']} - {r['Jenis Perawatan']}"):
-                    st.write("**Dipo Induk:**", r.get("Dipo Induk",""))
-                    st.write("**Lokasi:**", r["Depo/Lokasi"])
-                    st.write("**Petugas:**", r["Nama Petugas"], "| **NIPP:**", r["NIPP"])
-                    if r["Foto Sebelum"]:
-                        st.markdown(f"[Buka foto sebelum]({r['Foto Sebelum']})")
-                    if r["Foto Sesudah"]:
-                        st.markdown(f"[Buka foto sesudah]({r['Foto Sesudah']})")
-                    if r["Keterangan"]:
-                        st.write("**Keterangan:**", r["Keterangan"])
+    f1,f2,f3 = st.columns([1,2,1])
+    with f1: type_filter = st.selectbox("Jenis sarana", ["Semua"] + TYPES)
+    with f2: number_filter = st.text_input("Cari nomor sarana", placeholder="Ketik nomor sarana...")
+    with f3: status_filter = st.selectbox("Status", ["Semua", "SO", "TSO", "Belum ditentukan"])
+    f4,f5 = st.columns(2)
+    with f4: program_filter = st.multiselect("Program pemeliharaan", PROGRAMS)
+    with f5: location_filter = st.text_input("Filter depo / lokasi")
+    result = df.copy()
+    if type_filter != "Semua": result = result[result["Jenis Sarana"].astype(str).str.upper() == type_filter.upper()]
+    if number_filter.strip(): result = result[result["Nomor Sarana"].astype(str).str.contains(number_filter.strip(), case=False, na=False)]
+    if status_filter != "Semua": result = result[result["Status SO/TSO"].astype(str) == status_filter]
+    if program_filter: result = result[result["Program Pemeliharaan"].isin(program_filter)]
+    if location_filter.strip(): result = result[result["Depo/Lokasi"].astype(str).str.contains(location_filter.strip(), case=False, na=False)]
+    st.caption(f"Ditemukan {len(result):,} catatan")
+    if len(result):
+        result = result.copy()
+        result["_date"] = pd.to_datetime(result["Tanggal Perawatan"], errors="coerce")
+        result = result.sort_values("_date", ascending=False).drop(columns="_date")
+        visible = [c for c in ["Tanggal Perawatan","Jenis Sarana","Nomor Sarana","Program Pemeliharaan","Siklus Pemeriksaan","Depo/Lokasi","Status SO/TSO","Nama Petugas","Foto Sebelum","Foto Sesudah"] if c in result]
+        st.dataframe(result[visible], use_container_width=True, hide_index=True, column_config={
+            "Foto Sebelum":st.column_config.LinkColumn("Foto sebelum", display_text="Buka foto"),
+            "Foto Sesudah":st.column_config.LinkColumn("Foto sesudah", display_text="Buka foto"),
+        })
+        options = sorted(result["Nomor Sarana"].astype(str).unique().tolist())
+        selected = st.selectbox("Tampilkan detail riwayat sarana", ["-- Pilih nomor sarana --"] + options)
+        if selected != "-- Pilih nomor sarana --":
+            detail = result[result["Nomor Sarana"].astype(str) == selected]
+            st.markdown(f"### Riwayat {selected}")
+            for _, row in detail.iterrows():
+                title = f"{row['Tanggal Perawatan']} · {row['Program Pemeliharaan']} · {row['Status SO/TSO']} · ID {row['ID']}"
+                with st.expander(title):
+                    x,y = st.columns(2)
+                    with x:
+                        st.write("**Identitas**")
+                        st.write(f"Jenis: {row['Jenis Sarana']} | Lokasi: {row['Depo/Lokasi']}")
+                        st.write(f"Mulai dinas: {row['Mulai Dinas']} | Siklus: {row['Siklus Pemeriksaan']}")
+                        st.write(f"Bogie 1: {row['Nomor Bogie 1']} | Bogie 2: {row['Nomor Bogie 2']}")
+                        st.write("**Kondisi dan tindakan**")
+                        st.write("Sebelum:", row["Kondisi Sebelum"])
+                        st.write("Tindakan:", row["Tindakan Perawatan"])
+                        st.write("Sesudah:", row["Kondisi Sesudah"])
+                    with y:
+                        st.write("**Pemeriksaan komponen**")
+                        st.write(f"Knuckle B1/B2: {row['Keausan Knuckle Bogie 1']} / {row['Keausan Knuckle Bogie 2']}")
+                        st.write(f"Emptyload: {row['Kelengkapan Emptyload']} | Boffer: {row['Tinggi Boffer']}")
+                        st.write(f"Brake: {row['Brake']} | Release: {row['Release']} | Langkah torak: {row['Langkah Torak']}")
+                        st.write(f"AC: {row['AC']} | CD: {row['CD']} | Tekanan BC: {row['Tekanan BC']}")
+                        st.write(f"Petugas: {row['Nama Petugas']} | NIPP: {row['NIPP']}")
+                    for bn in (1,2):
+                        rows = []
+                        for rn in range(1,5):
+                            rows.append({"Roda":f"Roda {rn}","Diameter":row.get(f"Diameter B{bn} R{rn}",""),"Flens":row.get(f"Flens B{bn} R{rn}",""),"Bidang Jalan":row.get(f"Bidang Jalan B{bn} R{rn}","")})
+                        st.markdown(f"**Hasil pengukuran Bogie {bn}**")
+                        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+                    if row["Foto Sebelum"]: st.markdown(f"[📷 Buka foto sebelum]({row['Foto Sebelum']})")
+                    if row["Foto Sesudah"]: st.markdown(f"[📷 Buka foto sesudah]({row['Foto Sesudah']})")
+                    if row["Lain-lain"]: st.write("**Lain-lain:**", row["Lain-lain"])
+                    if row["Keterangan"]: st.write("**Keterangan:**", row["Keterangan"])
+                    st.caption(f"Dibuat: {row['Waktu Input']} | ID: {row['ID']}")
     else:
-        st.info("Data tidak ditemukan.")
+        st.info("Data tidak ditemukan. Periksa kembali filter pencarian.")
 
+# --------------------------- REPORT ---------------------------
 elif page == "Laporan Otomatis":
-    st.subheader("Laporan Data Perawatan")
+    st.subheader("Laporan dan Rekapitulasi Perawatan")
     if df.empty:
         st.info("Belum ada data untuk dilaporkan.")
     else:
-        l,r = st.columns(2)
-        with l:
-            start = st.date_input("Dari tanggal", value=date(date.today().year,1,1), key="start")
-        with r:
-            end = st.date_input("Sampai tanggal", value=date.today(), key="end")
-        report = df.copy()
-        dates = pd.to_datetime(report["Tanggal Perawatan"], errors="coerce")
-        report = report[(dates.dt.date >= start) & (dates.dt.date <= end)]
-        x,y = st.columns(2)
-        with x:
-            jenis = st.multiselect("Jenis sarana", ["GD","GB","B"], default=["GD","GB","B"])
-        with y:
-            perawatan = st.multiselect("Jenis perawatan", sorted(df["Jenis Perawatan"].dropna().astype(str).unique()))
-        report = report[report["Jenis Sarana"].isin(jenis)]
-        if perawatan:
-            report = report[report["Jenis Perawatan"].isin(perawatan)]
-        m1,m2,m3 = st.columns(3)
-        m1.metric("Jumlah catatan", len(report))
-        m2.metric("GD + GB", int(report["Jenis Sarana"].isin(["GD", "GB"]).sum()))
-        m3.metric("B", int((report["Jenis Sarana"]=="B").sum()))
-        st.markdown("#### Rekap per jenis perawatan")
-        if len(report):
-            st.bar_chart(report["Jenis Perawatan"].value_counts())
-            st.dataframe(report, use_container_width=True, hide_index=True)
-            csv = report.to_csv(index=False).encode("utf-8-sig")
-            st.download_button("Unduh laporan CSV", csv, file_name=f"laporan_perawatan_{start}_{end}.csv", mime="text/csv")
-            excel_buffer = BytesIO()
-            with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
-                report.to_excel(writer, index=False, sheet_name="Laporan")
-            st.download_button("Unduh laporan Excel", excel_buffer.getvalue(), file_name=f"laporan_perawatan_{start}_{end}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        d1,d2 = st.columns(2)
+        with d1: start = st.date_input("Dari tanggal", value=date(date.today().year,1,1), key="report_start")
+        with d2: end = st.date_input("Sampai tanggal", value=date.today(), key="report_end")
+        if start > end:
+            st.error("Tanggal awal tidak boleh melewati tanggal akhir.")
+            st.stop()
+        r = df.copy()
+        parsed = pd.to_datetime(r["Tanggal Perawatan"], errors="coerce")
+        r = r[(parsed.dt.date >= start) & (parsed.dt.date <= end)]
+        x,y,z = st.columns(3)
+        with x: types = st.multiselect("Jenis sarana", sorted([v for v in r["Jenis Sarana"].dropna().astype(str).unique()]), default=sorted([v for v in r["Jenis Sarana"].dropna().astype(str).unique()]))
+        with y: programs = st.multiselect("Program", PROGRAMS, default=PROGRAMS)
+        with z: statuses = st.multiselect("Status", ["SO","TSO","Belum ditentukan"], default=["SO","TSO","Belum ditentukan"])
+        r = r[r["Jenis Sarana"].isin(types) & r["Program Pemeliharaan"].isin(programs) & r["Status SO/TSO"].isin(statuses)]
+        m1,m2,m3,m4 = st.columns(4)
+        m1.metric("Jumlah catatan", f"{len(r):,}")
+        m2.metric("GD / GB", f"{int(r['Jenis Sarana'].isin(['GD','GB']).sum()):,}")
+        m3.metric("B", f"{int((r['Jenis Sarana']=='B').sum()):,}")
+        m4.metric("TSO", f"{int((r['Status SO/TSO']=='TSO').sum()):,}")
+        if len(r):
+            left,right = st.columns(2)
+            with left:
+                st.markdown("#### Rekap program pemeliharaan")
+                st.bar_chart(r["Program Pemeliharaan"].value_counts())
+            with right:
+                st.markdown("#### Rekap status sarana")
+                st.bar_chart(r["Status SO/TSO"].value_counts())
+            st.markdown("#### Data sesuai filter")
+            st.dataframe(r, use_container_width=True, hide_index=True)
+            safe_start, safe_end = start.isoformat(), end.isoformat()
+            st.download_button("⬇️ Unduh CSV", r.to_csv(index=False).encode("utf-8-sig"), file_name=f"laporan_perawatan_{safe_start}_{safe_end}.csv", mime="text/csv")
+            st.download_button("⬇️ Unduh Excel", make_excel(r), file_name=f"laporan_perawatan_{safe_start}_{safe_end}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         else:
-            st.warning("Tidak ada data pada filter periode tersebut.")
+            st.warning("Tidak ada data sesuai filter yang dipilih.")
+
+st.markdown("<hr><div class='small-muted'>Sistem Data Perawatan Sarana · Simpan data sesuai hasil pemeriksaan aktual · Periksa kembali catatan sebelum dikirim</div>", unsafe_allow_html=True)
