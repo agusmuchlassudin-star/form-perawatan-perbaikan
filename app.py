@@ -265,9 +265,18 @@ elif page == "Input Perawatan":
                 format="DD/MM/YYYY",
                 help="Tanggal mulai dinas dapat dipilih hingga 30 tahun ke belakang."
             )
-            p24p48_terakhir = st.date_input("P24/P48 Terakhir", value=date.today(), help="Masukkan tanggal terakhir pelaksanaan P24 atau P48.")
+            p24p48_terakhir = st.date_input(
+                "P24/P48 Terakhir",
+                value=date.today(),
+                format="DD/MM/YYYY",
+                help="Masukkan tanggal terakhir pelaksanaan P24 atau P48."
+            )
         with c3:
-            tanggal = st.date_input("Tanggal pemeriksaan / perawatan", value=date.today())
+            tanggal = st.date_input(
+                "Tanggal pemeriksaan / perawatan",
+                value=date.today(),
+                format="DD/MM/YYYY"
+            )
             program = st.selectbox("Program pemeliharaan *", PROGRAMS)
         lokasi = st.text_input("Depo / lokasi pemeriksaan", placeholder="Contoh: Depo Gerbong Jakarta Gudang")
         st.markdown("### 2. Identitas bogie")
