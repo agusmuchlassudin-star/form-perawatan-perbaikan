@@ -25,7 +25,7 @@ MAX_PHOTO_MB = 10
 
 HEADERS = [
     "ID", "Tanggal Perawatan", "Jenis Sarana", "Nomor Sarana", "Mulai Dinas",
-    "Siklus Pemeriksaan", "Program Pemeliharaan", "Depo/Lokasi", "Nomor Bogie 1", "Nomor Bogie 2",
+    "P24/P48 Terakhir", "Program Pemeliharaan", "Depo/Lokasi", "Nomor Bogie 1", "Nomor Bogie 2",
     "Diameter B1 R1", "Flens B1 R1", "Bidang Jalan B1 R1",
     "Diameter B1 R2", "Flens B1 R2", "Bidang Jalan B1 R2",
     "Diameter B1 R3", "Flens B1 R3", "Bidang Jalan B1 R3",
@@ -106,6 +106,11 @@ def connect_google():
         ws.update(range_name="A1", values=[HEADERS])
         existing = HEADERS.copy()
     else:
+        # Ganti nama kolom lama tanpa menggeser atau menghapus data yang sudah tersimpan.
+        if "Siklus Pemeriksaan" in existing and "P24/P48 Terakhir" not in existing:
+            old_idx = existing.index("Siklus Pemeriksaan")
+            existing[old_idx] = "P24/P48 Terakhir"
+            ws.update_cell(1, old_idx + 1, "P24/P48 Terakhir")
         missing = [h for h in HEADERS if h not in existing]
         if missing:
             updated = existing + missing
@@ -253,7 +258,7 @@ elif page == "Input Perawatan":
             nomor = st.text_input("Nomor sarana *", placeholder="Contoh: GD 421005")
         with c2:
             mulai_dinas = st.date_input("Mulai dinas", value=date.today())
-            siklus = st.selectbox("Siklus pemeriksaan", ["P24", "P48"])
+            p24p48_terakhir = st.date_input("P24/P48 Terakhir", value=date.today(), help="Masukkan tanggal terakhir pelaksanaan P24 atau P48.")
         with c3:
             tanggal = st.date_input("Tanggal pemeriksaan / perawatan", value=date.today())
             program = st.selectbox("Program pemeliharaan *", PROGRAMS)
@@ -368,7 +373,7 @@ elif page == "Input Perawatan":
             record.update({
                 "ID":record_id, "Tanggal Perawatan":tanggal.isoformat(), "Jenis Sarana":jenis_final,
                 "Nomor Sarana":clean_text(nomor).upper(), "Mulai Dinas":mulai_dinas.isoformat(),
-                "Siklus Pemeriksaan":siklus, "Program Pemeliharaan":program, "Depo/Lokasi":clean_text(lokasi),
+                "P24/P48 Terakhir":p24p48_terakhir.isoformat(), "Program Pemeliharaan":program, "Depo/Lokasi":clean_text(lokasi),
                 "Nomor Bogie 1":clean_text(no_bogie1), "Nomor Bogie 2":clean_text(no_bogie2),
                 "Keausan Knuckle Bogie 1":clean_text(knuckle1), "Keausan Knuckle Bogie 2":clean_text(knuckle2),
                 "Kelengkapan Emptyload":emptyload, "Tinggi Boffer":clean_text(boffer),
@@ -424,7 +429,7 @@ elif page == "Riwayat Perawatan":
         result = result.copy()
         result["_date"] = pd.to_datetime(result["Tanggal Perawatan"], errors="coerce")
         result = result.sort_values("_date", ascending=False).drop(columns="_date")
-        visible = [c for c in ["Tanggal Perawatan","Jenis Sarana","Nomor Sarana","Program Pemeliharaan","Siklus Pemeriksaan","Depo/Lokasi","Status SO/TSO","Nama Petugas","Foto Sebelum","Foto Sesudah"] if c in result]
+        visible = [c for c in ["Tanggal Perawatan","Jenis Sarana","Nomor Sarana","Program Pemeliharaan","P24/P48 Terakhir","Depo/Lokasi","Status SO/TSO","Nama Petugas","Foto Sebelum","Foto Sesudah"] if c in result]
         st.dataframe(result[visible], use_container_width=True, hide_index=True, column_config={
             "Foto Sebelum":st.column_config.LinkColumn("Foto sebelum", display_text="Buka foto"),
             "Foto Sesudah":st.column_config.LinkColumn("Foto sesudah", display_text="Buka foto"),
@@ -441,7 +446,7 @@ elif page == "Riwayat Perawatan":
                     with x:
                         st.write("**Identitas**")
                         st.write(f"Jenis: {row['Jenis Sarana']} | Lokasi: {row['Depo/Lokasi']}")
-                        st.write(f"Mulai dinas: {row['Mulai Dinas']} | Siklus: {row['Siklus Pemeriksaan']}")
+                        st.write(f"Mulai dinas: {row['Mulai Dinas']} | P24/P48 Terakhir: {row['P24/P48 Terakhir']}")
                         st.write(f"Bogie 1: {row['Nomor Bogie 1']} | Bogie 2: {row['Nomor Bogie 2']}")
                         st.write("**Kondisi dan tindakan**")
                         st.write("Sebelum:", row["Kondisi Sebelum"])
