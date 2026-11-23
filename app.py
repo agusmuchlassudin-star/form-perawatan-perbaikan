@@ -45,6 +45,7 @@ HEADERS = [
     "Komponen", "Jenis Pekerjaan", "Kondisi Sebelum", "Tindakan Perawatan", "Kondisi Sesudah",
     "Lain-lain", "Status SO/TSO", "Nama Petugas", "NIPP", "Foto Sebelum", "Foto Sesudah",
     "Keterangan", "Waktu Input", "Dibuat Oleh",
+    "Status Approval", "Disetujui Oleh", "Waktu Approval",
 ]
 PROGRAMS = ["P1", "P3", "P6", "P12", "Perbaikan"]
 TYPES = ["GD", "GB", "B", "Lainnya"]
@@ -73,6 +74,18 @@ div[data-testid="stMetric"] label, div[data-testid="stMetric"] [data-testid="stM
 input, textarea, [data-baseweb="select"] > div { background-color:#f8fbff !important; color:#12283b !important; border-radius:7px !important; }
 label, .stMarkdown, p, h1, h2, h3, h4 { color:#edf4fb; }
 [data-testid="stDataFrame"] { border:1px solid #294760; border-radius:10px; }
+/* Pastikan tulisan hasil pengukuran di tabel input bogie terbaca jelas */
+[data-testid="stDataEditor"] [role="grid"],
+[data-testid="stDataEditor"] [role="gridcell"],
+[data-testid="stDataEditor"] [role="columnheader"],
+[data-testid="stDataEditor"] input,
+[data-testid="stDataEditor"] textarea {
+    color:#172b3d !important;
+    -webkit-text-fill-color:#172b3d !important;
+}
+[data-testid="stDataEditor"] [role="gridcell"] { background-color:#f4f8fc !important; }
+[data-testid="stDataEditor"] [role="columnheader"] { background-color:#dce8f2 !important; color:#10283d !important; font-weight:700 !important; }
+[data-testid="stDataEditor"] [data-testid="stMarkdownContainer"] { color:#172b3d !important; }
 [data-testid="stExpander"] { background:#10283d; border:1px solid #294760; border-radius:10px; }
 hr { border-color:#294760; }
 .small-muted { color:#9bb2c5; font-size:12px; }
@@ -150,6 +163,8 @@ def load_records(ws):
     for col in HEADERS:
         if col not in df.columns:
             df[col] = ""
+    # Catatan lama otomatis masuk status belum disetujui.
+    df["Status Approval"] = df["Status Approval"].replace("", "Belum Approve")
     return df
 
 def append_record(ws, record, sheet_headers):
@@ -158,6 +173,32 @@ def append_record(ws, record, sheet_headers):
 
 def log_activity(log_ws, record_id, activity, user, nomor, note=""):
     log_ws.append_row([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), record_id, activity, user, nomor, note], value_input_option="RAW")
+
+def update_record_by_id(ws, record_id, record, sheet_headers):
+    """Perbarui satu baris berdasarkan ID tanpa menggeser kolom atau menghapus kolom tambahan."""
+    values = ws.get_all_values()
+    if not values:
+        raise ValueError("Spreadsheet belum memiliki data.")
+    headers = values[0]
+    if "ID" not in headers:
+        raise ValueError("Kolom ID tidak ditemukan pada Google Sheet.")
+    id_col = headers.index("ID")
+    row_number = None
+    for idx, row in enumerate(values[1:], start=2):
+        if len(row) > id_col and row[id_col] == record_id:
+            row_number = idx
+            break
+    if row_number is None:
+        raise ValueError("Data tidak ditemukan. Muat ulang halaman dan coba lagi.")
+    old_row = values[row_number - 1]
+    updated = [old_row[i] if i < len(old_row) else "" for i in range(len(headers))]
+    for i, header in enumerate(headers):
+        if header in record:
+            updated[i] = record[header]
+    from gspread.utils import rowcol_to_a1
+    end_cell = rowcol_to_a1(row_number, len(headers))
+    ws.update(range_name=f"A{row_number}:{end_cell}", values=[updated], value_input_option="RAW")
+    return row_number
 
 def clean_text(value):
     return str(value or "").strip()
@@ -193,7 +234,7 @@ user_label = clean_text(cfg.get("nama_pengguna", "Petugas aplikasi")) or "Petuga
 
 with st.sidebar:
     st.markdown("## 🚆 MENU UTAMA")
-    page = st.radio("Pilih halaman", ["Dashboard", "Input Perawatan", "Riwayat Perawatan", "Laporan Otomatis"], label_visibility="collapsed")
+    page = st.radio("Pilih halaman", ["Dashboard", "Input Perawatan", "Edit & Persetujuan", "Riwayat Perawatan", "Laporan Otomatis"], label_visibility="collapsed")
     st.divider()
     st.markdown("**Depo Gerbong Jakarta Gudang**")
     st.caption("Sistem pencatatan pemeriksaan dan pemeliharaan sarana")
@@ -401,7 +442,8 @@ elif page == "Input Perawatan":
                 "Kondisi Sesudah":clean_text(sesudah), "Lain-lain":clean_text(lainnya),
                 "Status SO/TSO":status, "Nama Petugas":clean_text(petugas), "NIPP":clean_text(nipp),
                 "Keterangan":clean_text(keterangan), "Waktu Input":datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "Dibuat Oleh":user_label,
+                "Dibuat Oleh":user_label, "Status Approval":"Belum Approve",
+                "Disetujui Oleh":"", "Waktu Approval":"",
             })
             for bn, table in wheel_tables.items():
                 for _, row in table.iterrows():
@@ -424,6 +466,77 @@ elif page == "Input Perawatan":
                 st.error(f"Penyimpanan belum berhasil: {exc}")
                 st.warning("Jika foto sudah terunggah tetapi penyimpanan baris gagal, periksa folder Google Drive agar tidak ada file foto yatim.")
 
+# --------------------------- EDIT & APPROVAL ---------------------------
+elif page == "Edit & Persetujuan":
+    st.subheader("Edit Data dan Persetujuan Perawatan")
+    st.caption("Data dapat diedit selama berstatus Belum Approve. Setelah disetujui, data terkunci dan menu edit tidak tersedia untuk catatan tersebut.")
+    if df.empty:
+        st.info("Belum ada data perawatan.")
+    else:
+        pending = df.copy()
+        pending["Status Approval"] = pending["Status Approval"].replace("", "Belum Approve")
+        pending = pending.sort_values("Waktu Input", ascending=False)
+        choices = pending.apply(lambda r: f"{r['Nomor Sarana']} | {r['Tanggal Perawatan']} | {r['Program Pemeliharaan']} | {r['ID']} [{r['Status Approval']}]", axis=1).tolist()
+        selected_label = st.selectbox("Pilih catatan perawatan", ["-- Pilih data --"] + choices)
+        if selected_label != "-- Pilih data --":
+            selected_id = selected_label.split("|")[-1].split("[")[0].strip()
+            selected_rows = df[df["ID"].astype(str) == selected_id]
+            if not selected_rows.empty:
+                selected_record = selected_rows.iloc[0].to_dict()
+                approval_status = clean_text(selected_record.get("Status Approval")) or "Belum Approve"
+                st.markdown(f"**Nomor Sarana:** {selected_record.get('Nomor Sarana','')}  ")
+                st.markdown(f"**Status:** {approval_status}")
+                if approval_status == "Disetujui":
+                    st.success(f"Data telah disetujui oleh {selected_record.get('Disetujui Oleh','')} pada {selected_record.get('Waktu Approval','')}.")
+                    st.info("Menu edit otomatis dinonaktifkan karena data sudah disetujui.")
+                else:
+                    st.warning("Data masih dapat diperbaiki. Pastikan seluruh hasil pemeriksaan sudah benar sebelum disetujui.")
+                    edit_frame = pd.DataFrame([{h: selected_record.get(h, "") for h in actual_headers}])
+                    protected = [c for c in ["ID", "Waktu Input", "Dibuat Oleh", "Status Approval", "Disetujui Oleh", "Waktu Approval"] if c in edit_frame.columns]
+                    with st.form(f"edit_record_{selected_id}"):
+                        edited_frame = st.data_editor(
+                            edit_frame, key=f"editor_{selected_id}", use_container_width=True,
+                            hide_index=True, num_rows="fixed", disabled=protected,
+                            column_config={c: st.column_config.TextColumn(c, width="medium") for c in edit_frame.columns}
+                        )
+                        save_edit = st.form_submit_button("💾 SIMPAN PERUBAHAN", type="primary", use_container_width=True)
+                    if save_edit:
+                        # Pemeriksaan ulang status langsung dari Google Sheet agar tidak bisa mengedit data yang baru disetujui.
+                        fresh = load_records(ws)
+                        current = fresh[fresh["ID"].astype(str) == selected_id]
+                        current_status = "" if current.empty else (clean_text(current.iloc[0].get("Status Approval")) or "Belum Approve")
+                        if current_status == "Disetujui":
+                            st.error("Perubahan ditolak: data sudah disetujui oleh pengguna lain.")
+                        else:
+                            updated_record = edited_frame.iloc[0].to_dict()
+                            updated_record["Status Approval"] = "Belum Approve"
+                            try:
+                                update_record_by_id(ws, selected_id, updated_record, actual_headers)
+                                log_activity(log_ws, selected_id, "EDIT", user_label, clean_text(updated_record.get("Nomor Sarana")), "Perubahan data sebelum persetujuan")
+                                st.success("Perubahan berhasil disimpan.")
+                                st.rerun()
+                            except Exception as exc:
+                                st.error(f"Gagal menyimpan perubahan: {exc}")
+                    st.divider()
+                    confirm_approve = st.checkbox("Saya sudah memeriksa dan menyatakan data ini benar untuk disetujui.", key=f"confirm_approve_{selected_id}")
+                    if st.button("✅ SETUJUI DATA", type="primary", disabled=not confirm_approve, key=f"approve_{selected_id}", use_container_width=True):
+                        # Validasi status dilakukan kembali di sisi server sebelum mengunci baris.
+                        fresh = load_records(ws)
+                        current = fresh[fresh["ID"].astype(str) == selected_id]
+                        current_status = "" if current.empty else (clean_text(current.iloc[0].get("Status Approval")) or "Belum Approve")
+                        if current_status == "Disetujui":
+                            st.error("Data ini sudah disetujui sebelumnya.")
+                        else:
+                            approved_record = current.iloc[0].to_dict()
+                            approved_record.update({"Status Approval":"Disetujui", "Disetujui Oleh":user_label, "Waktu Approval":datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+                            try:
+                                update_record_by_id(ws, selected_id, approved_record, actual_headers)
+                                log_activity(log_ws, selected_id, "APPROVE", user_label, clean_text(approved_record.get("Nomor Sarana")), "Data disetujui dan dikunci")
+                                st.success("Data berhasil disetujui. Menu edit untuk catatan ini telah dinonaktifkan.")
+                                st.rerun()
+                            except Exception as exc:
+                                st.error(f"Gagal menyetujui data: {exc}")
+
 # --------------------------- HISTORY ---------------------------
 elif page == "Riwayat Perawatan":
     st.subheader("Riwayat Perawatan per Nomor Sarana")
@@ -445,7 +558,7 @@ elif page == "Riwayat Perawatan":
         result = result.copy()
         result["_date"] = pd.to_datetime(result["Tanggal Perawatan"], errors="coerce")
         result = result.sort_values("_date", ascending=False).drop(columns="_date")
-        visible = [c for c in ["Tanggal Perawatan","Jenis Sarana","Nomor Sarana","Program Pemeliharaan","P24/P48 Terakhir","Depo/Lokasi","Status SO/TSO","Nama Petugas","Foto Sebelum","Foto Sesudah"] if c in result]
+        visible = [c for c in ["Tanggal Perawatan","Jenis Sarana","Nomor Sarana","Program Pemeliharaan","P24/P48 Terakhir","Depo/Lokasi","Status SO/TSO","Status Approval","Disetujui Oleh","Nama Petugas","Foto Sebelum","Foto Sesudah"] if c in result]
         st.dataframe(result[visible], use_container_width=True, hide_index=True, column_config={
             "Foto Sebelum":st.column_config.LinkColumn("Foto sebelum", display_text="Buka foto"),
             "Foto Sesudah":st.column_config.LinkColumn("Foto sesudah", display_text="Buka foto"),
