@@ -494,7 +494,7 @@ elif page == "Edit & Persetujuan":
                     edit_frame = pd.DataFrame([{h: selected_record.get(h, "") for h in actual_headers}])
                     protected = [c for c in ["ID", "Waktu Input", "Dibuat Oleh", "Status Approval", "Disetujui Oleh", "Waktu Approval"] if c in edit_frame.columns]
                     with st.form(f"edit_record_{selected_id}"):
-                       edited_frame = st.data_editor(edit_frame, key=f"editor_{selected_id}", use_container_width=True, hide_index=True, num_rows="fixed")
+                        edited_frame = st.data_editor(edit_frame, key=f"editor_{selected_id}", use_container_width=True, hide_index=True, num_rows="fixed")
                         save_edit = st.form_submit_button("💾 SIMPAN PERUBAHAN", type="primary", use_container_width=True)
                     if save_edit:
                         # Pemeriksaan ulang status langsung dari Google Sheet agar tidak bisa mengedit data yang baru disetujui.
