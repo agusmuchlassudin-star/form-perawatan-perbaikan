@@ -257,7 +257,14 @@ elif page == "Input Perawatan":
             jenis_lain = st.text_input("Jenis sarana lainnya", placeholder="Isi jika memilih Lainnya")
             nomor = st.text_input("Nomor sarana *", placeholder="Contoh: GD 421005")
         with c2:
-            mulai_dinas = st.date_input("Mulai dinas", value=date.today())
+            mulai_dinas = st.date_input(
+                "Mulai dinas",
+                value=date.today(),
+                min_value=date.today().replace(year=date.today().year - 30),
+                max_value=date.today(),
+                format="DD/MM/YYYY",
+                help="Tanggal mulai dinas dapat dipilih hingga 30 tahun ke belakang."
+            )
             p24p48_terakhir = st.date_input("P24/P48 Terakhir", value=date.today(), help="Masukkan tanggal terakhir pelaksanaan P24 atau P48.")
         with c3:
             tanggal = st.date_input("Tanggal pemeriksaan / perawatan", value=date.today())
