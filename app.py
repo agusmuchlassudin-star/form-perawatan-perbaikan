@@ -325,7 +325,7 @@ elif page == "Input Perawatan":
         with b1: no_bogie1 = st.text_input("Nomor Bogie 1")
         with b2: no_bogie2 = st.text_input("Nomor Bogie 2")
         st.markdown("### 3. Pengukuran roda")
-        st.caption("Isi angka beserta satuan bila diperlukan. Kosongkan kolom jika tidak dilakukan pengukuran.")
+        st.caption("Hasil pengukuran dapat menggunakan tanda koma (,) untuk angka desimal, contoh: 12,5 atau 145,75. Kosongkan kolom jika tidak dilakukan pengukuran.")
         wheel_tables = {}
         for bogie_num in (1,2):
             st.markdown(f"**Bogie {bogie_num}**")
@@ -334,9 +334,9 @@ elif page == "Input Perawatan":
                 initial, key=f"wheel_table_{bogie_num}", use_container_width=True, hide_index=True,
                 disabled=["Roda"], num_rows="fixed", column_config={
                     "Roda": st.column_config.TextColumn("Posisi roda", width="small"),
-                    "Diameter": st.column_config.TextColumn("Diameter", help="Isi hasil ukur diameter roda"),
-                    "Flens": st.column_config.TextColumn("Flens", help="Isi hasil ukur flens"),
-                    "Bidang Jalan": st.column_config.TextColumn("Bidang jalan", help="Isi hasil ukur bidang jalan"),
+                    "Diameter": st.column_config.TextColumn("Diameter", help="Masukkan hasil ukur. Gunakan koma (,) untuk angka desimal, contoh 845,5."),
+                    "Flens": st.column_config.TextColumn("Flens", help="Masukkan hasil ukur. Gunakan koma (,) untuk angka desimal, contoh 28,5."),
+                    "Bidang Jalan": st.column_config.TextColumn("Bidang jalan", help="Masukkan hasil ukur. Gunakan koma (,) untuk angka desimal, contoh 32,5."),
                 })
         # Checklist tambahan khusus sarana B
         special_tables = {}
@@ -356,7 +356,7 @@ elif page == "Input Perawatan":
                         disabled=["Posisi"],
                         column_config={
                             "Posisi": st.column_config.TextColumn("Posisi", width="small"),
-                            "Hasil Ukur": st.column_config.TextColumn("Hasil ukur")
+                            "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", help="Masukkan angka pengukuran. Tanda koma (,) diperbolehkan untuk angka desimal, contoh 12,5.")
                         })
             for bn in (1, 2):
                 st.markdown(f"**Spring Plank — Bogie {bn}**")
@@ -366,7 +366,7 @@ elif page == "Input Perawatan":
                     hide_index=True, num_rows="fixed", disabled=["Nomor"],
                     column_config={
                         "Nomor": st.column_config.TextColumn("Nomor", width="small"),
-                        "Hasil Ukur": st.column_config.TextColumn("Hasil ukur")
+                        "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", help="Masukkan angka pengukuran. Tanda koma (,) diperbolehkan untuk angka desimal, contoh 12,5.")
                     })
         st.markdown("### 5. Pengukuran Center Plate")
         center_plate = st.text_input("Tebal Center Plate", placeholder="Isi hasil pengukuran (mis. mm)")
@@ -494,7 +494,11 @@ elif page == "Edit & Persetujuan":
                     edit_frame = pd.DataFrame([{h: selected_record.get(h, "") for h in actual_headers}])
                     protected = [c for c in ["ID", "Waktu Input", "Dibuat Oleh", "Status Approval", "Disetujui Oleh", "Waktu Approval"] if c in edit_frame.columns]
                     with st.form(f"edit_record_{selected_id}"):
-                        edited_frame = st.data_editor(edit_frame, key=f"editor_{selected_id}", use_container_width=True, hide_index=True, num_rows="fixed")
+                        edited_frame = st.data_editor(
+                            edit_frame, key=f"editor_{selected_id}", use_container_width=True,
+                            hide_index=True, num_rows="fixed", disabled=protected,
+                            column_config={c: st.column_config.TextColumn(c, width="medium", help="Kolom hasil ukur menerima angka desimal dengan tanda koma (,) misalnya 12,5.") if any(k in c.lower() for k in ["diameter", "flens", "bidang jalan", "tinggi frame", "axle box", "spring plank", "center plate", "boffer", "knuckle", "brake", "release", "torak", "tekanan"]) else st.column_config.TextColumn(c, width="medium") for c in edit_frame.columns}
+                        )
                         save_edit = st.form_submit_button("💾 SIMPAN PERUBAHAN", type="primary", use_container_width=True)
                     if save_edit:
                         # Pemeriksaan ulang status langsung dari Google Sheet agar tidak bisa mengedit data yang baru disetujui.
