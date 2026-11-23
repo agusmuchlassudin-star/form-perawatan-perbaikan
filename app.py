@@ -25,7 +25,7 @@ MAX_PHOTO_MB = 10
 
 HEADERS = [
     "ID", "Tanggal Perawatan", "Jenis Sarana", "Nomor Sarana", "Mulai Dinas",
-    "P24/P48", "Program Pemeliharaan", "Depo/Lokasi", "Nomor Bogie 1", "Nomor Bogie 2",
+    "Siklus Pemeriksaan", "Program Pemeliharaan", "Depo/Lokasi", "Nomor Bogie 1", "Nomor Bogie 2",
     "Diameter B1 R1", "Flens B1 R1", "Bidang Jalan B1 R1",
     "Diameter B1 R2", "Flens B1 R2", "Bidang Jalan B1 R2",
     "Diameter B1 R3", "Flens B1 R3", "Bidang Jalan B1 R3",
@@ -34,7 +34,13 @@ HEADERS = [
     "Diameter B2 R2", "Flens B2 R2", "Bidang Jalan B2 R2",
     "Diameter B2 R3", "Flens B2 R3", "Bidang Jalan B2 R3",
     "Diameter B2 R4", "Flens B2 R4", "Bidang Jalan B2 R4",
-    "Keausan Knuckle Bogie 1", "Keausan Knuckle Bogie 2", "Kelengkapan Emptyload", "Tinggi Boffer",
+     "Keausan Knuckle Bogie 1", "Keausan Knuckle Bogie 2", "Kelengkapan Emptyload", "Tinggi Boffer",
+    "Tebal Center Plate",
+    "Tinggi Frame B1 R1", "Tinggi Frame B1 R2", "Tinggi Frame B1 R3", "Tinggi Frame B1 R4",
+    "Tinggi Frame B2 R1", "Tinggi Frame B2 R2", "Tinggi Frame B2 R3", "Tinggi Frame B2 R4",
+    "Axle Box B1 R1", "Axle Box B1 R2", "Axle Box B1 R3", "Axle Box B1 R4",
+    "Axle Box B2 R1", "Axle Box B2 R2", "Axle Box B2 R3", "Axle Box B2 R4",
+    "Spring Plank B1 N1", "Spring Plank B1 N2", "Spring Plank B2 N1", "Spring Plank B2 N2",
     "Brake", "Release", "Langkah Torak", "AC", "CD", "Tekanan BC",
     "Komponen", "Jenis Pekerjaan", "Kondisi Sebelum", "Tindakan Perawatan", "Kondisi Sesudah",
     "Lain-lain", "Status SO/TSO", "Nama Petugas", "NIPP", "Foto Sebelum", "Foto Sesudah",
@@ -100,11 +106,6 @@ def connect_google():
         ws.update(range_name="A1", values=[HEADERS])
         existing = HEADERS.copy()
     else:
-        # Migrasi nama kolom lama tanpa menggeser data yang sudah tersimpan.
-        if "Siklus Pemeriksaan" in existing and "P24/P48" not in existing:
-            old_index = existing.index("Siklus Pemeriksaan")
-            existing[old_index] = "P24/P48"
-            ws.update_cell(1, old_index + 1, "P24/P48")
         missing = [h for h in HEADERS if h not in existing]
         if missing:
             updated = existing + missing
@@ -141,8 +142,6 @@ def load_records(ws):
     if not rows:
         return pd.DataFrame(columns=HEADERS)
     df = pd.DataFrame(rows).fillna("")
-    if "P24/P48" not in df.columns and "Siklus Pemeriksaan" in df.columns:
-        df["P24/P48"] = df["Siklus Pemeriksaan"]
     for col in HEADERS:
         if col not in df.columns:
             df[col] = ""
@@ -245,16 +244,16 @@ if page == "Dashboard":
 elif page == "Input Perawatan":
     st.subheader("Input Pemeriksaan & Pemeliharaan Sarana")
     st.caption("Isi sesuai hasil pemeriksaan aktual. Pengukuran roda dibuat ringkas dalam tabel per bogie.")
-    with st.form("form_perawatan_v3", clear_on_submit=True):
-        st.markdown("### 1. Identitas sarana")
+    st.markdown("### 1. Identitas sarana")
+    jenis_sarana = st.selectbox("Jenis sarana *", TYPES, key="jenis_sarana_dynamic")
+    with st.form("form_perawatan_v4", clear_on_submit=True):
         c1,c2,c3 = st.columns(3)
         with c1:
-            jenis_sarana = st.selectbox("Jenis sarana *", TYPES)
             jenis_lain = st.text_input("Jenis sarana lainnya", placeholder="Isi jika memilih Lainnya")
             nomor = st.text_input("Nomor sarana *", placeholder="Contoh: GD 421005")
         with c2:
             mulai_dinas = st.date_input("Mulai dinas", value=date.today())
-            tanggal_p24p48 = st.date_input("Tanggal P24/P48", value=date.today(), help="Isi tanggal pelaksanaan pemeriksaan P24/P48.")
+            siklus = st.selectbox("Siklus pemeriksaan", ["P24", "P48"])
         with c3:
             tanggal = st.date_input("Tanggal pemeriksaan / perawatan", value=date.today())
             program = st.selectbox("Program pemeliharaan *", PROGRAMS)
@@ -277,13 +276,50 @@ elif page == "Input Perawatan":
                     "Flens": st.column_config.TextColumn("Flens", help="Isi hasil ukur flens"),
                     "Bidang Jalan": st.column_config.TextColumn("Bidang jalan", help="Isi hasil ukur bidang jalan"),
                 })
-        st.markdown("### 4. Pemeriksaan komponen")
+        # Checklist tambahan khusus sarana B
+        special_tables = {}
+        if jenis_sarana == "B":
+            st.markdown("### 4. Pengukuran khusus Sarana B")
+            st.caption("Pengukuran disimpan terpisah untuk setiap bogie dan posisi roda/nomor komponen.")
+            for component, label in [("Tinggi Frame", "Tinggi Frame"), ("Axle Box", "Axle Box")]:
+                for bn in (1, 2):
+                    st.markdown(f"**{label} — Bogie {bn}**")
+                    initial_special = pd.DataFrame({
+                        "Posisi": [f"Roda {i}" for i in range(1, 5)],
+                        "Hasil Ukur": ["", "", "", ""]
+                    })
+                    special_tables[f"{component}_B{bn}"] = st.data_editor(
+                        initial_special, key=f"{component.lower().replace(' ', '_')}_b{bn}",
+                        use_container_width=True, hide_index=True, num_rows="fixed",
+                        disabled=["Posisi"],
+                        column_config={
+                            "Posisi": st.column_config.TextColumn("Posisi", width="small"),
+                            "Hasil Ukur": st.column_config.TextColumn("Hasil ukur")
+                        })
+            for bn in (1, 2):
+                st.markdown(f"**Spring Plank — Bogie {bn}**")
+                initial_spring = pd.DataFrame({"Nomor": ["Nomor 1", "Nomor 2"], "Hasil Ukur": ["", ""]})
+                special_tables[f"Spring_Plank_B{bn}"] = st.data_editor(
+                    initial_spring, key=f"spring_plank_b{bn}", use_container_width=True,
+                    hide_index=True, num_rows="fixed", disabled=["Nomor"],
+                    column_config={
+                        "Nomor": st.column_config.TextColumn("Nomor", width="small"),
+                        "Hasil Ukur": st.column_config.TextColumn("Hasil ukur")
+                    })
+        st.markdown("### 5. Pengukuran Center Plate")
+        center_plate = st.text_input("Tebal Center Plate", placeholder="Isi hasil pengukuran (mis. mm)")
+        st.markdown("### 6. Pemeriksaan komponen")
         c1,c2,c3 = st.columns(3)
         with c1:
             knuckle1 = st.text_input("Keausan knuckle Bogie 1")
             knuckle2 = st.text_input("Keausan knuckle Bogie 2")
         with c2:
-            emptyload = st.selectbox("Kelengkapan emptyload", ["Belum diperiksa", "Ada", "Tidak ada", "Tidak berlaku"])
+            if jenis_sarana == "GD":
+                emptyload = st.selectbox("Pemeriksaan Empty Load", ["Belum diperiksa", "Lengkap", "Tidak lengkap", "Tidak berlaku"])
+            else:
+                emptyload = ""
+                if jenis_sarana == "B":
+                    st.caption("Pemeriksaan Empty Load tidak berlaku untuk Sarana B.")
             boffer = st.text_input("Tinggi boffer")
         with c3:
             status = st.selectbox("Status sarana", ["SO", "TSO", "Belum ditentukan"])
@@ -332,10 +368,11 @@ elif page == "Input Perawatan":
             record.update({
                 "ID":record_id, "Tanggal Perawatan":tanggal.isoformat(), "Jenis Sarana":jenis_final,
                 "Nomor Sarana":clean_text(nomor).upper(), "Mulai Dinas":mulai_dinas.isoformat(),
-                "P24/P48":tanggal_p24p48.isoformat(), "Program Pemeliharaan":program, "Depo/Lokasi":clean_text(lokasi),
+                "Siklus Pemeriksaan":siklus, "Program Pemeliharaan":program, "Depo/Lokasi":clean_text(lokasi),
                 "Nomor Bogie 1":clean_text(no_bogie1), "Nomor Bogie 2":clean_text(no_bogie2),
                 "Keausan Knuckle Bogie 1":clean_text(knuckle1), "Keausan Knuckle Bogie 2":clean_text(knuckle2),
                 "Kelengkapan Emptyload":emptyload, "Tinggi Boffer":clean_text(boffer),
+                "Tebal Center Plate":clean_text(center_plate),
                 "Brake":clean_text(brake), "Release":clean_text(release), "Langkah Torak":clean_text(torak),
                 "AC":clean_text(ac), "CD":clean_text(cd), "Tekanan BC":clean_text(bc),
                 "Komponen":clean_text(komponen), "Jenis Pekerjaan":clean_text(pekerjaan),
@@ -387,7 +424,7 @@ elif page == "Riwayat Perawatan":
         result = result.copy()
         result["_date"] = pd.to_datetime(result["Tanggal Perawatan"], errors="coerce")
         result = result.sort_values("_date", ascending=False).drop(columns="_date")
-        visible = [c for c in ["Tanggal Perawatan","Jenis Sarana","Nomor Sarana","Program Pemeliharaan","P24/P48","Depo/Lokasi","Status SO/TSO","Nama Petugas","Foto Sebelum","Foto Sesudah"] if c in result]
+        visible = [c for c in ["Tanggal Perawatan","Jenis Sarana","Nomor Sarana","Program Pemeliharaan","Siklus Pemeriksaan","Depo/Lokasi","Status SO/TSO","Nama Petugas","Foto Sebelum","Foto Sesudah"] if c in result]
         st.dataframe(result[visible], use_container_width=True, hide_index=True, column_config={
             "Foto Sebelum":st.column_config.LinkColumn("Foto sebelum", display_text="Buka foto"),
             "Foto Sesudah":st.column_config.LinkColumn("Foto sesudah", display_text="Buka foto"),
@@ -404,7 +441,7 @@ elif page == "Riwayat Perawatan":
                     with x:
                         st.write("**Identitas**")
                         st.write(f"Jenis: {row['Jenis Sarana']} | Lokasi: {row['Depo/Lokasi']}")
-                        st.write(f"Mulai dinas: {row['Mulai Dinas']} | Tanggal P24/P48: {row['P24/P48']}")
+                        st.write(f"Mulai dinas: {row['Mulai Dinas']} | Siklus: {row['Siklus Pemeriksaan']}")
                         st.write(f"Bogie 1: {row['Nomor Bogie 1']} | Bogie 2: {row['Nomor Bogie 2']}")
                         st.write("**Kondisi dan tindakan**")
                         st.write("Sebelum:", row["Kondisi Sebelum"])
@@ -413,10 +450,23 @@ elif page == "Riwayat Perawatan":
                     with y:
                         st.write("**Pemeriksaan komponen**")
                         st.write(f"Knuckle B1/B2: {row['Keausan Knuckle Bogie 1']} / {row['Keausan Knuckle Bogie 2']}")
-                        st.write(f"Emptyload: {row['Kelengkapan Emptyload']} | Boffer: {row['Tinggi Boffer']}")
+                        if str(row["Jenis Sarana"]).upper() == "GD":
+                            st.write(f"Empty Load: {row['Kelengkapan Emptyload']}")
+                        st.write(f"Tebal Center Plate: {row.get('Tebal Center Plate', '')} | Boffer: {row['Tinggi Boffer']}")
                         st.write(f"Brake: {row['Brake']} | Release: {row['Release']} | Langkah torak: {row['Langkah Torak']}")
                         st.write(f"AC: {row['AC']} | CD: {row['CD']} | Tekanan BC: {row['Tekanan BC']}")
                         st.write(f"Petugas: {row['Nama Petugas']} | NIPP: {row['NIPP']}")
+                    if str(row["Jenis Sarana"]).upper() == "B":
+                        st.markdown("**Pengukuran khusus Sarana B**")
+                        for component in ("Tinggi Frame", "Axle Box"):
+                            for bn in (1, 2):
+                                vals = [{"Posisi": f"Roda {rn}", "Hasil Ukur": row.get(f"{component} B{bn} R{rn}", "")} for rn in range(1, 5)]
+                                st.write(f"{component} — Bogie {bn}")
+                                st.dataframe(pd.DataFrame(vals), use_container_width=True, hide_index=True)
+                        for bn in (1, 2):
+                            vals = [{"Nomor": f"Nomor {n}", "Hasil Ukur": row.get(f"Spring Plank B{bn} N{n}", "")} for n in (1, 2)]
+                            st.write(f"Spring Plank — Bogie {bn}")
+                            st.dataframe(pd.DataFrame(vals), use_container_width=True, hide_index=True)
                     for bn in (1,2):
                         rows = []
                         for rn in range(1,5):
