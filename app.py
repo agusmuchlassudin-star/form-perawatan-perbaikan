@@ -197,7 +197,7 @@ def load_records(ws):
     rows = ws.get_all_records()
     if not rows:
         return pd.DataFrame(columns=HEADERS)
-    df = pd.DataFrame(rows).fillna("")
+    df = pd.DataFrame(rows).fillna("").astype(str)
     for col in HEADERS:
         if col not in df.columns:
             df[col] = ""
