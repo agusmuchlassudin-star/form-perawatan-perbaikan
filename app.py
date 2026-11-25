@@ -101,6 +101,15 @@ hr { border-color:#294760; }
 # app_password = "GANTI_DENGAN_PASSWORD_KUAT"
 AUTH_USERNAME = str(st.secrets.get("app_username", "admin"))
 AUTH_PASSWORD = str(st.secrets.get("app_password", "KAI@2026!"))
+AUTH_USERNAME = str(st.secrets.get("app_username", "43804"))
+AUTH_PASSWORD = str(st.secrets.get("app_password", "KAI@43804!"))
+AUTH_USERNAME = str(st.secrets.get("app_username", "54576"))
+AUTH_PASSWORD = str(st.secrets.get("app_password", "KAI@54576!"))
+AUTH_USERNAME = str(st.secrets.get("app_username", "54577"))
+AUTH_PASSWORD = str(st.secrets.get("app_password", "KAI@54577!"))
+AUTH_USERNAME = str(st.secrets.get("app_username", "58617"))
+AUTH_PASSWORD = str(st.secrets.get("app_password", "KAI@58617!"))
+
 
 if not st.session_state.get("authenticated", False):
     st.markdown("<div class='hero'><h1>🔐 LOGIN SISTEM DATA PERAWATAN SARANA</h1><p>Masuk menggunakan akun petugas yang telah terdaftar.</p></div>", unsafe_allow_html=True)
