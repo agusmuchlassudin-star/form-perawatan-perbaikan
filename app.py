@@ -45,7 +45,7 @@ HEADERS = [
     "Spring Plank B1 N1", "Spring Plank B1 N2", "Spring Plank B2 N1", "Spring Plank B2 N2",
     "Brake", "Release", "Langkah Torak", "AC", "CD", "Tekanan BC",
     "Jenis Pekerjaan", "Kondisi Sebelum", "Tindakan Perawatan", "Kondisi Sesudah",
-    "Lain-lain", "Status SO/TSO", "Nama Petugas", "NIPP", "Nama Petugas 2", "NIPP 2", "Nama Petugas 3", "NIPP 3", "Foto Sebelum", "Foto Sesudah",
+    "Lain-lain", "Status SO/TSO", "Nama Petugas", "NIPP", "Nama Petugas 2", "NIPP 2", "Nama Petugas 3", "NIPP 3", "Foto Sarana", "Foto Sebelum", "Foto Saat Perbaikan", "Foto Sesudah",
     "Keterangan", "Waktu Input", "Dibuat Oleh",
     "Status Approval", "Disetujui Oleh", "Waktu Approval",
 ]
@@ -471,12 +471,31 @@ elif page == "Input Perawatan":
             lainnya = st.text_area("Lain-lain / temuan pemeriksaan", height=130)
         keterangan = st.text_area("Keterangan tambahan", height=80)
 
-        foto_sebelum = foto_sesudah = None
-        if not hide_extra and not jenis_perbaikan:
+        foto_sarana = foto_sebelum = foto_saat = foto_sesudah = None
+        # Program Perbaikan memakai empat tahap dokumentasi foto.
+        # Pada program pemeliharaan, foto disembunyikan sesuai aturan jenis sarana/program.
+        hide_photo_maintenance = (
+            (jenis_sarana == "B" and program in ["P3", "P6", "P12"]) or
+            (jenis_sarana == "GD" and program == "P12")
+        )
+        show_photo = jenis_perbaikan or (not hide_extra and not hide_photo_maintenance)
+        if show_photo:
             st.markdown("### 9. Dokumentasi foto")
-            f1,f2 = st.columns(2)
-            with f1: foto_sebelum = st.file_uploader("Foto sebelum", type=["jpg","jpeg","png","webp"], key="upload_before", help=f"Maksimal {MAX_PHOTO_MB} MB per foto")
-            with f2: foto_sesudah = st.file_uploader("Foto sesudah", type=["jpg","jpeg","png","webp"], key="upload_after", help=f"Maksimal {MAX_PHOTO_MB} MB per foto")
+            if jenis_perbaikan:
+                st.caption("Program Perbaikan wajib dilengkapi dokumentasi empat tahap: foto sarana, sebelum, saat, dan setelah perbaikan.")
+                f1, f2 = st.columns(2)
+                with f1:
+                    foto_sarana = st.file_uploader("Foto sarana *", type=["jpg", "jpeg", "png", "webp"], key="upload_repair_vehicle", help=f"Maksimal {MAX_PHOTO_MB} MB per foto")
+                    foto_sebelum = st.file_uploader("Foto sebelum perbaikan *", type=["jpg", "jpeg", "png", "webp"], key="upload_repair_before", help=f"Maksimal {MAX_PHOTO_MB} MB per foto")
+                with f2:
+                    foto_saat = st.file_uploader("Foto saat perbaikan *", type=["jpg", "jpeg", "png", "webp"], key="upload_repair_during", help=f"Maksimal {MAX_PHOTO_MB} MB per foto")
+                    foto_sesudah = st.file_uploader("Foto setelah perbaikan *", type=["jpg", "jpeg", "png", "webp"], key="upload_repair_after", help=f"Maksimal {MAX_PHOTO_MB} MB per foto")
+            else:
+                f1, f2 = st.columns(2)
+                with f1:
+                    foto_sebelum = st.file_uploader("Foto sebelum", type=["jpg", "jpeg", "png", "webp"], key="upload_before", help=f"Maksimal {MAX_PHOTO_MB} MB per foto")
+                with f2:
+                    foto_sesudah = st.file_uploader("Foto sesudah", type=["jpg", "jpeg", "png", "webp"], key="upload_after", help=f"Maksimal {MAX_PHOTO_MB} MB per foto")
 
         st.markdown("### 10. Petugas (maksimal 3 orang)")
         petugas_data = []
@@ -492,8 +511,17 @@ elif page == "Input Perawatan":
         errors = []
         if not clean_text(nomor): errors.append("Nomor sarana wajib diisi.")
         if jenis_sarana == "Lainnya" and not clean_text(jenis_lain): errors.append("Jenis sarana lainnya wajib diisi.")
-        if foto_sebelum and foto_sebelum.size > MAX_PHOTO_MB*1024*1024: errors.append(f"Foto sebelum melebihi {MAX_PHOTO_MB} MB.")
-        if foto_sesudah and foto_sesudah.size > MAX_PHOTO_MB*1024*1024: errors.append(f"Foto sesudah melebihi {MAX_PHOTO_MB} MB.")
+        photo_items = [
+            ("Foto sarana", foto_sarana), ("Foto sebelum", foto_sebelum),
+            ("Foto saat perbaikan", foto_saat), ("Foto sesudah", foto_sesudah),
+        ]
+        if jenis_perbaikan:
+            for label, uploaded in photo_items:
+                if uploaded is None:
+                    errors.append(f"{label.capitalize()} wajib diunggah untuk Program Perbaikan.")
+        for label, uploaded in photo_items:
+            if uploaded and uploaded.size > MAX_PHOTO_MB*1024*1024:
+                errors.append(f"{label.capitalize()} melebihi {MAX_PHOTO_MB} MB.")
         if errors:
             for e in errors: st.error(e)
         else:
@@ -540,8 +568,12 @@ elif page == "Input Perawatan":
                         if n: record[f"{component} B{bn} R{n.group(1)}"] = clean_text(row["Hasil Ukur"])
             try:
                 with st.spinner("Mengunggah dokumentasi dan menyimpan data ke Google Spreadsheet..."):
+                    if foto_sarana:
+                        record["Foto Sarana"] = upload_photo(drive, foto_sarana, folder_id, f"{record_id}_SARANA_{foto_sarana.name}", make_public)
                     if foto_sebelum:
                         record["Foto Sebelum"] = upload_photo(drive, foto_sebelum, folder_id, f"{record_id}_SEBELUM_{foto_sebelum.name}", make_public)
+                    if foto_saat:
+                        record["Foto Saat Perbaikan"] = upload_photo(drive, foto_saat, folder_id, f"{record_id}_SAAT_PERBAIKAN_{foto_saat.name}", make_public)
                     if foto_sesudah:
                         record["Foto Sesudah"] = upload_photo(drive, foto_sesudah, folder_id, f"{record_id}_SESUDAH_{foto_sesudah.name}", make_public)
                     append_record(ws, record, actual_headers)
@@ -645,9 +677,11 @@ elif page == "Riwayat Perawatan":
         result = result.copy()
         result["_date"] = pd.to_datetime(result["Tanggal Perawatan"], errors="coerce")
         result = result.sort_values("_date", ascending=False).drop(columns="_date")
-        visible = [c for c in ["Tanggal Perawatan","Jenis Sarana","Nomor Sarana","Program Pemeliharaan","P24/P48 Terakhir","Depo/Lokasi","Status SO/TSO","Status Approval","Disetujui Oleh","Nama Petugas","Foto Sebelum","Foto Sesudah"] if c in result]
+        visible = [c for c in ["Tanggal Perawatan","Jenis Sarana","Nomor Sarana","Program Pemeliharaan","P24/P48 Terakhir","Depo/Lokasi","Status SO/TSO","Status Approval","Disetujui Oleh","Nama Petugas","Foto Sarana","Foto Sebelum","Foto Saat Perbaikan","Foto Sesudah"] if c in result]
         st.dataframe(result[visible], use_container_width=True, hide_index=True, column_config={
+            "Foto Sarana":st.column_config.LinkColumn("Foto sarana", display_text="Buka foto"),
             "Foto Sebelum":st.column_config.LinkColumn("Foto sebelum", display_text="Buka foto"),
+            "Foto Saat Perbaikan":st.column_config.LinkColumn("Foto saat perbaikan", display_text="Buka foto"),
             "Foto Sesudah":st.column_config.LinkColumn("Foto sesudah", display_text="Buka foto"),
         })
         options = sorted(result["Nomor Sarana"].astype(str).unique().tolist())
@@ -696,7 +730,9 @@ elif page == "Riwayat Perawatan":
                             rows.append({"Roda":f"Roda {rn}","Diameter":row.get(f"Diameter B{bn} R{rn}",""),"Flens":row.get(f"Flens B{bn} R{rn}",""),"Bidang Jalan":row.get(f"Bidang Jalan B{bn} R{rn}","")})
                         st.markdown(f"**Hasil pengukuran Bogie {bn}**")
                         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+                    if row.get("Foto Sarana", ""): st.markdown(f"[📷 Buka foto sarana]({row['Foto Sarana']})")
                     if row["Foto Sebelum"]: st.markdown(f"[📷 Buka foto sebelum]({row['Foto Sebelum']})")
+                    if row.get("Foto Saat Perbaikan", ""): st.markdown(f"[📷 Buka foto saat perbaikan]({row['Foto Saat Perbaikan']})")
                     if row["Foto Sesudah"]: st.markdown(f"[📷 Buka foto sesudah]({row['Foto Sesudah']})")
                     if row["Lain-lain"]: st.write("**Lain-lain:**", row["Lain-lain"])
                     if row["Keterangan"]: st.write("**Keterangan:**", row["Keterangan"])
