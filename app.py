@@ -305,7 +305,7 @@ except Exception as exc:
     st.info("Periksa Spreadsheet ID, izin berbagi kepada email service account, Google Sheets API, dan Google Drive API.")
     st.stop()
 
-folder_id = clean_text(cfg.get("drive_folder_id", ""))
+folder_id = clean_text(cfg.get("1xucvX1Kq-o7VITSglOBwxXSC-QVONdAE", ""))
 make_public = bool(cfg.get("share_photos_publicly", False))
 user_label = clean_text(cfg.get("nama_pengguna", "Petugas aplikasi")) or "Petugas aplikasi"
 
