@@ -4,6 +4,7 @@ from datetime import date, datetime
 from io import BytesIO
 from uuid import uuid4
 import re
+import hmac
 import gspread
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
@@ -25,7 +26,7 @@ MAX_PHOTO_MB = 10
 DATABASE_EDITOR_EMAIL = "spoorslosd@gmail.com"
 
 HEADERS = [
-    "ID", "Tanggal Perawatan", "Jenis Sarana", "Nomor Sarana", "Mulai Dinas",
+    "ID", "Tanggal Perawatan", "Jenis Sarana", "Nomor Sarana",
     "P24/P48 Terakhir", "Program Pemeliharaan", "Depo/Lokasi", "Nomor Bogie 1", "Nomor Bogie 2",
     "Diameter B1 R1", "Flens B1 R1", "Bidang Jalan B1 R1",
     "Diameter B1 R2", "Flens B1 R2", "Bidang Jalan B1 R2",
@@ -43,8 +44,8 @@ HEADERS = [
     "Axle Box B2 R1", "Axle Box B2 R2", "Axle Box B2 R3", "Axle Box B2 R4",
     "Spring Plank B1 N1", "Spring Plank B1 N2", "Spring Plank B2 N1", "Spring Plank B2 N2",
     "Brake", "Release", "Langkah Torak", "AC", "CD", "Tekanan BC",
-    "Komponen", "Jenis Pekerjaan", "Kondisi Sebelum", "Tindakan Perawatan", "Kondisi Sesudah",
-    "Lain-lain", "Status SO/TSO", "Nama Petugas", "NIPP", "Foto Sebelum", "Foto Sesudah",
+    "Jenis Pekerjaan", "Kondisi Sebelum", "Tindakan Perawatan", "Kondisi Sesudah",
+    "Lain-lain", "Status SO/TSO", "Nama Petugas", "NIPP", "Nama Petugas 2", "NIPP 2", "Nama Petugas 3", "NIPP 3", "Foto Sebelum", "Foto Sesudah",
     "Keterangan", "Waktu Input", "Dibuat Oleh",
     "Status Approval", "Disetujui Oleh", "Waktu Approval",
 ]
@@ -93,6 +94,30 @@ hr { border-color:#294760; }
 </style>
 <div class="hero"><h1>🚆 SISTEM DATA PERAWATAN SARANA</h1><p>Pengelolaan pemeriksaan dan pemeliharaan GD · GB · B · Lainnya | Database Google Spreadsheet & dokumentasi Google Drive</p></div>
 """, unsafe_allow_html=True)
+
+# --------------------------- LOGIN APLIKASI ---------------------------
+# Kredensial awal dapat diganti melalui .streamlit/secrets.toml:
+# app_username = "admin"
+# app_password = "GANTI_DENGAN_PASSWORD_KUAT"
+AUTH_USERNAME = str(st.secrets.get("app_username", "admin"))
+AUTH_PASSWORD = str(st.secrets.get("app_password", "KAI@2026!"))
+
+if not st.session_state.get("authenticated", False):
+    st.markdown("<div class='hero'><h1>🔐 LOGIN SISTEM DATA PERAWATAN SARANA</h1><p>Masuk menggunakan akun petugas yang telah terdaftar.</p></div>", unsafe_allow_html=True)
+    with st.form("login_form"):
+        login_user = st.text_input("Nama pengguna", placeholder="Masukkan username")
+        login_pass = st.text_input("Password", type="password", placeholder="Masukkan password")
+        login_submit = st.form_submit_button("MASUK", type="primary", use_container_width=True)
+    if login_submit:
+        valid_user = hmac.compare_digest(login_user.strip(), AUTH_USERNAME)
+        valid_pass = hmac.compare_digest(login_pass, AUTH_PASSWORD)
+        if valid_user and valid_pass:
+            st.session_state["authenticated"] = True
+            st.session_state["login_user"] = login_user.strip()
+            st.rerun()
+        else:
+            st.error("Username atau password tidak sesuai.")
+    st.stop()
 
 # --------------------------- GOOGLE CONNECT ---------------------------
 def get_config():
@@ -282,6 +307,10 @@ with st.sidebar:
     st.markdown("**Depo Gerbong Jakarta Gudang**")
     st.caption("Sistem pencatatan pemeriksaan dan pemeliharaan sarana")
     st.caption(f"Pengguna: {user_label}")
+    if st.button("Keluar", use_container_width=True):
+        st.session_state["authenticated"] = False
+        st.session_state.pop("login_user", None)
+        st.rerun()
     if "share_status" in globals():
         if "berhasil" in share_status.lower() or "sudah memiliki" in share_status.lower():
             st.success(share_status)
@@ -337,113 +366,101 @@ if page == "Dashboard":
 # --------------------------- INPUT ---------------------------
 elif page == "Input Perawatan":
     st.subheader("Input Pemeriksaan & Pemeliharaan Sarana")
-    st.caption("Isi sesuai hasil pemeriksaan aktual. Pengukuran roda dibuat ringkas dalam tabel per bogie.")
+    st.caption("Formulir menyesuaikan otomatis dengan jenis sarana dan program pemeliharaan yang dipilih.")
     st.markdown("### 1. Identitas sarana")
     jenis_sarana = st.selectbox("Jenis sarana *", TYPES, key="jenis_sarana_dynamic")
-    with st.form("form_perawatan_v4", clear_on_submit=True):
+    program = st.selectbox("Program pemeliharaan *", PROGRAMS, key="program_dynamic")
+    jenis_perbaikan = program == "Perbaikan"
+    hide_extra = ((jenis_sarana == "GD" and program in ["P1", "P3", "P6"]) or
+                  (jenis_sarana == "B" and program == "P1"))
+
+    with st.form("form_perawatan_v5", clear_on_submit=True):
         c1,c2,c3 = st.columns(3)
         with c1:
             jenis_lain = st.text_input("Jenis sarana lainnya", placeholder="Isi jika memilih Lainnya")
             nomor = st.text_input("Nomor sarana *", placeholder="Contoh: GD 421005")
         with c2:
-            mulai_dinas = st.date_input(
-                "Mulai dinas",
-                value=date.today(),
-                min_value=date.today().replace(year=date.today().year - 30),
-                max_value=date.today(),
-                format="DD/MM/YYYY",
-                help="Tanggal mulai dinas dapat dipilih hingga 30 tahun ke belakang."
-            )
-            p24p48_terakhir = st.date_input(
-                "P24/P48 Terakhir",
-                value=date.today(),
-                format="DD/MM/YYYY",
-                help="Masukkan tanggal terakhir pelaksanaan P24 atau P48."
-            )
+            p24p48_terakhir = st.date_input("P24/P48 Terakhir", value=date.today(), format="DD/MM/YYYY")
         with c3:
-            tanggal = st.date_input(
-                "Tanggal pemeriksaan / perawatan",
-                value=date.today(),
-                format="DD/MM/YYYY"
-            )
-            program = st.selectbox("Program pemeliharaan *", PROGRAMS)
+            tanggal = st.date_input("Tanggal pemeriksaan / perawatan", value=date.today(), format="DD/MM/YYYY")
         lokasi = st.text_input("Depo / lokasi pemeriksaan", placeholder="Contoh: Depo Gerbong Jakarta Gudang")
-        st.markdown("### 2. Identitas bogie")
-        b1,b2 = st.columns(2)
-        with b1: no_bogie1 = st.text_input("Nomor Bogie 1")
-        with b2: no_bogie2 = st.text_input("Nomor Bogie 2")
-        st.markdown("### 3. Pengukuran roda")
-        st.caption("Hasil pengukuran dapat menggunakan tanda koma (,) untuk angka desimal, contoh: 12,5 atau 145,75. Kosongkan kolom jika tidak dilakukan pengukuran.")
+
+        no_bogie1 = no_bogie2 = ""
         wheel_tables = {}
-        for bogie_num in (1,2):
-            st.markdown(f"**Bogie {bogie_num}**")
-            initial = pd.DataFrame({"Roda": ["Roda 1","Roda 2","Roda 3","Roda 4"], "Diameter": ["","","",""], "Flens": ["","","",""], "Bidang Jalan": ["","","",""]})
-            wheel_tables[bogie_num] = st.data_editor(
-                initial, key=f"wheel_table_{bogie_num}", use_container_width=True, hide_index=True,
-                disabled=["Roda"], num_rows="fixed", column_config={
-                    "Roda": st.column_config.TextColumn("Posisi roda", width="small"),
-                    "Diameter": st.column_config.TextColumn("Diameter", help="Masukkan hasil ukur. Gunakan koma (,) untuk angka desimal, contoh 845,5."),
-                    "Flens": st.column_config.TextColumn("Flens", help="Masukkan hasil ukur. Gunakan koma (,) untuk angka desimal, contoh 28,5."),
-                    "Bidang Jalan": st.column_config.TextColumn("Bidang jalan", help="Masukkan hasil ukur. Gunakan koma (,) untuk angka desimal, contoh 32,5."),
-                })
-        # Checklist tambahan khusus sarana B
         special_tables = {}
-        if jenis_sarana == "B":
-            st.markdown("### 4. Pengukuran khusus Sarana B")
-            st.caption("Pengukuran disimpan terpisah untuk setiap bogie dan posisi roda/nomor komponen.")
-            for component, label in [("Tinggi Frame", "Tinggi Frame"), ("Axle Box", "Axle Box")]:
+        if not jenis_perbaikan:
+            st.markdown("### 2. Identitas bogie")
+            b1,b2 = st.columns(2)
+            with b1: no_bogie1 = st.text_input("Nomor Bogie 1")
+            with b2: no_bogie2 = st.text_input("Nomor Bogie 2")
+            st.markdown("### 3. Pengukuran roda")
+            st.caption("Hasil pengukuran dapat menggunakan tanda koma (,) untuk angka desimal, contoh: 12,5 atau 145,75.")
+            for bogie_num in (1,2):
+                st.markdown(f"**Bogie {bogie_num}**")
+                initial = pd.DataFrame({"Roda": ["Roda 1","Roda 2","Roda 3","Roda 4"], "Diameter": ["","","",""], "Flens": ["","","",""], "Bidang Jalan": ["","","",""]})
+                wheel_tables[bogie_num] = st.data_editor(
+                    initial, key=f"wheel_table_{bogie_num}", use_container_width=True, hide_index=True,
+                    disabled=["Roda"], num_rows="fixed", column_config={
+                        "Roda": st.column_config.TextColumn("Posisi roda", width="small"),
+                        "Diameter": st.column_config.TextColumn("Diameter", help="Gunakan koma untuk desimal, contoh 845,5."),
+                        "Flens": st.column_config.TextColumn("Flens", help="Gunakan koma untuk desimal, contoh 28,5."),
+                        "Bidang Jalan": st.column_config.TextColumn("Bidang jalan", help="Gunakan koma untuk desimal, contoh 32,5."),
+                    })
+            if jenis_sarana == "B":
+                st.markdown("### 4. Pengukuran khusus Sarana B")
+                for component, label in [("Tinggi Frame", "Tinggi Frame"), ("Axle Box", "Axle Box")]:
+                    for bn in (1, 2):
+                        st.markdown(f"**{label} — Bogie {bn}**")
+                        initial_special = pd.DataFrame({"Posisi": [f"Roda {i}" for i in range(1, 5)], "Hasil Ukur": ["", "", "", ""]})
+                        special_tables[f"{component}_B{bn}"] = st.data_editor(
+                            initial_special, key=f"{component.lower().replace(' ', '_')}_b{bn}",
+                            use_container_width=True, hide_index=True, num_rows="fixed", disabled=["Posisi"],
+                            column_config={"Posisi": st.column_config.TextColumn("Posisi", width="small"),
+                                           "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", help="Tanda koma (,) diperbolehkan, contoh 12,5.")})
                 for bn in (1, 2):
-                    st.markdown(f"**{label} — Bogie {bn}**")
-                    initial_special = pd.DataFrame({
-                        "Posisi": [f"Roda {i}" for i in range(1, 5)],
-                        "Hasil Ukur": ["", "", "", ""]
-                    })
-                    special_tables[f"{component}_B{bn}"] = st.data_editor(
-                        initial_special, key=f"{component.lower().replace(' ', '_')}_b{bn}",
-                        use_container_width=True, hide_index=True, num_rows="fixed",
-                        disabled=["Posisi"],
-                        column_config={
-                            "Posisi": st.column_config.TextColumn("Posisi", width="small"),
-                            "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", help="Masukkan angka pengukuran. Tanda koma (,) diperbolehkan untuk angka desimal, contoh 12,5.")
-                        })
-            for bn in (1, 2):
-                st.markdown(f"**Spring Plank — Bogie {bn}**")
-                initial_spring = pd.DataFrame({"Nomor": ["Nomor 1", "Nomor 2"], "Hasil Ukur": ["", ""]})
-                special_tables[f"Spring_Plank_B{bn}"] = st.data_editor(
-                    initial_spring, key=f"spring_plank_b{bn}", use_container_width=True,
-                    hide_index=True, num_rows="fixed", disabled=["Nomor"],
-                    column_config={
-                        "Nomor": st.column_config.TextColumn("Nomor", width="small"),
-                        "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", help="Masukkan angka pengukuran. Tanda koma (,) diperbolehkan untuk angka desimal, contoh 12,5.")
-                    })
-        st.markdown("### 5. Pengukuran Center Plate")
-        center_plate = st.text_input("Tebal Center Plate", placeholder="Isi hasil pengukuran (mis. mm)")
-        st.markdown("### 6. Pemeriksaan komponen")
-        c1,c2,c3 = st.columns(3)
-        with c1:
-            knuckle1 = st.text_input("Keausan knuckle Bogie 1")
-            knuckle2 = st.text_input("Keausan knuckle Bogie 2")
-        with c2:
-            if jenis_sarana == "GD":
-                emptyload = st.selectbox("Pemeriksaan Empty Load", ["Belum diperiksa", "Lengkap", "Tidak lengkap", "Tidak berlaku"])
-            else:
-                emptyload = ""
-                if jenis_sarana == "B":
+                    st.markdown(f"**Spring Plank — Bogie {bn}**")
+                    initial_spring = pd.DataFrame({"Nomor": ["Nomor 1", "Nomor 2"], "Hasil Ukur": ["", ""]})
+                    special_tables[f"Spring_Plank_B{bn}"] = st.data_editor(
+                        initial_spring, key=f"spring_plank_b{bn}", use_container_width=True,
+                        hide_index=True, num_rows="fixed", disabled=["Nomor"],
+                        column_config={"Nomor": st.column_config.TextColumn("Nomor", width="small"),
+                                       "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", help="Tanda koma (,) diperbolehkan, contoh 12,5.")})
+
+        center_plate = ""
+        if not jenis_perbaikan and not hide_extra:
+            st.markdown("### 5. Pengukuran Center Plate")
+            center_plate = st.text_input("Tebal Center Plate", placeholder="Isi hasil pengukuran (mis. mm)")
+
+        knuckle1 = knuckle2 = emptyload = boffer = ""
+        status = "Belum ditentukan"
+        if not jenis_perbaikan:
+            st.markdown("### 6. Pemeriksaan komponen")
+            c1,c2,c3 = st.columns(3)
+            with c1:
+                knuckle1 = st.text_input("Keausan knuckle Bogie 1")
+                knuckle2 = st.text_input("Keausan knuckle Bogie 2")
+            with c2:
+                if jenis_sarana == "GD":
+                    emptyload = st.selectbox("Pemeriksaan Empty Load", ["Belum diperiksa", "Lengkap", "Tidak lengkap", "Tidak berlaku"])
+                elif jenis_sarana == "B":
                     st.caption("Pemeriksaan Empty Load tidak berlaku untuk Sarana B.")
-            boffer = st.text_input("Tinggi boffer")
-        with c3:
-            status = st.selectbox("Status sarana", ["SO", "TSO", "Belum ditentukan"])
-            komponen = st.text_input("Komponen yang diperiksa")
-        st.markdown("### 5. Pemeriksaan pengereman dan tekanan")
-        p1,p2,p3 = st.columns(3)
-        with p1: brake = st.text_input("Brake")
-        with p2: release = st.text_input("Release")
-        with p3: torak = st.text_input("Langkah torak")
-        p4,p5,p6 = st.columns(3)
-        with p4: ac = st.text_input("AC")
-        with p5: cd = st.text_input("CD")
-        with p6: bc = st.text_input("Tekanan BC")
-        st.markdown("### 6. Temuan dan tindakan perawatan")
+                if not hide_extra:
+                    boffer = st.text_input("Tinggi boffer")
+        status = st.selectbox("Status sarana", ["SO", "TSO", "Belum ditentukan"])
+
+        brake = release = torak = ac = cd = bc = ""
+        if not hide_extra and not jenis_perbaikan:
+            st.markdown("### 7. Pemeriksaan pengereman dan tekanan")
+            p1,p2,p3 = st.columns(3)
+            with p1: brake = st.text_input("Brake")
+            with p2: release = st.text_input("Release")
+            with p3: torak = st.text_input("Langkah torak")
+            p4,p5,p6 = st.columns(3)
+            with p4: ac = st.text_input("AC")
+            with p5: cd = st.text_input("CD")
+            with p6: bc = st.text_input("Tekanan BC")
+
+        st.markdown("### 8. Temuan dan tindakan perawatan")
         pekerjaan = st.text_input("Jenis pekerjaan")
         d1,d2 = st.columns(2)
         with d1:
@@ -453,14 +470,22 @@ elif page == "Input Perawatan":
             sesudah = st.text_area("Kondisi sesudah", height=100)
             lainnya = st.text_area("Lain-lain / temuan pemeriksaan", height=130)
         keterangan = st.text_area("Keterangan tambahan", height=80)
-        st.markdown("### 7. Dokumentasi foto")
-        f1,f2 = st.columns(2)
-        with f1: foto_sebelum = st.file_uploader("Foto sebelum", type=["jpg","jpeg","png","webp"], key="upload_before", help=f"Maksimal {MAX_PHOTO_MB} MB per foto")
-        with f2: foto_sesudah = st.file_uploader("Foto sesudah", type=["jpg","jpeg","png","webp"], key="upload_after", help=f"Maksimal {MAX_PHOTO_MB} MB per foto")
-        st.markdown("### 8. Petugas")
-        t1,t2 = st.columns(2)
-        with t1: petugas = st.text_input("Nama petugas / teknisi")
-        with t2: nipp = st.text_input("NIPP")
+
+        foto_sebelum = foto_sesudah = None
+        if not hide_extra and not jenis_perbaikan:
+            st.markdown("### 9. Dokumentasi foto")
+            f1,f2 = st.columns(2)
+            with f1: foto_sebelum = st.file_uploader("Foto sebelum", type=["jpg","jpeg","png","webp"], key="upload_before", help=f"Maksimal {MAX_PHOTO_MB} MB per foto")
+            with f2: foto_sesudah = st.file_uploader("Foto sesudah", type=["jpg","jpeg","png","webp"], key="upload_after", help=f"Maksimal {MAX_PHOTO_MB} MB per foto")
+
+        st.markdown("### 10. Petugas (maksimal 3 orang)")
+        petugas_data = []
+        for i in range(1, 4):
+            st.markdown(f"**Petugas {i}**")
+            tc1,tc2 = st.columns(2)
+            with tc1: nama_petugas = st.text_input(f"Nama petugas {i}", key=f"nama_petugas_{i}")
+            with tc2: nomor_induk = st.text_input(f"NIPP {i}", key=f"nipp_petugas_{i}")
+            petugas_data.append((nama_petugas, nomor_induk))
         submitted = st.form_submit_button("💾 SIMPAN DATA PERAWATAN", type="primary", use_container_width=True)
 
     if submitted:
@@ -477,22 +502,24 @@ elif page == "Input Perawatan":
             record = {h:"" for h in HEADERS}
             record.update({
                 "ID":record_id, "Tanggal Perawatan":tanggal.isoformat(), "Jenis Sarana":jenis_final,
-                "Nomor Sarana":clean_text(nomor).upper(), "Mulai Dinas":mulai_dinas.isoformat(),
-                "P24/P48 Terakhir":p24p48_terakhir.isoformat(), "Program Pemeliharaan":program, "Depo/Lokasi":clean_text(lokasi),
+                "Nomor Sarana":clean_text(nomor).upper(), "P24/P48 Terakhir":p24p48_terakhir.isoformat(),
+                "Program Pemeliharaan":program, "Depo/Lokasi":clean_text(lokasi),
                 "Nomor Bogie 1":clean_text(no_bogie1), "Nomor Bogie 2":clean_text(no_bogie2),
                 "Keausan Knuckle Bogie 1":clean_text(knuckle1), "Keausan Knuckle Bogie 2":clean_text(knuckle2),
                 "Kelengkapan Emptyload":emptyload, "Tinggi Boffer":clean_text(boffer),
                 "Tebal Center Plate":clean_text(center_plate),
                 "Brake":clean_text(brake), "Release":clean_text(release), "Langkah Torak":clean_text(torak),
                 "AC":clean_text(ac), "CD":clean_text(cd), "Tekanan BC":clean_text(bc),
-                "Komponen":clean_text(komponen), "Jenis Pekerjaan":clean_text(pekerjaan),
-                "Kondisi Sebelum":clean_text(sebelum), "Tindakan Perawatan":clean_text(tindakan),
-                "Kondisi Sesudah":clean_text(sesudah), "Lain-lain":clean_text(lainnya),
-                "Status SO/TSO":status, "Nama Petugas":clean_text(petugas), "NIPP":clean_text(nipp),
+                "Jenis Pekerjaan":clean_text(pekerjaan), "Kondisi Sebelum":clean_text(sebelum),
+                "Tindakan Perawatan":clean_text(tindakan), "Kondisi Sesudah":clean_text(sesudah),
+                "Lain-lain":clean_text(lainnya), "Status SO/TSO":status,
                 "Keterangan":clean_text(keterangan), "Waktu Input":datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "Dibuat Oleh":user_label, "Status Approval":"Belum Approve",
-                "Disetujui Oleh":"", "Waktu Approval":"",
+                "Dibuat Oleh":user_label, "Status Approval":"Belum Approve", "Disetujui Oleh":"", "Waktu Approval":"",
             })
+            for idx, (nama, nip) in enumerate(petugas_data, start=1):
+                suffix = "" if idx == 1 else f" {idx}"
+                record[f"Nama Petugas{suffix}"] = clean_text(nama)
+                record[f"NIPP{suffix}"] = clean_text(nip)
             for bn, table in wheel_tables.items():
                 for _, row in table.iterrows():
                     match = re.search(r"(\d+)$", str(row["Roda"]))
@@ -500,6 +527,17 @@ elif page == "Input Perawatan":
                     rn = int(match.group(1))
                     for field in ["Diameter", "Flens", "Bidang Jalan"]:
                         record[f"{field} B{bn} R{rn}"] = clean_text(row[field])
+            for key, table in special_tables.items():
+                for _, row in table.iterrows():
+                    if key.startswith("Spring_Plank"):
+                        bn = key[-1]
+                        n = re.search(r"(\d+)$", str(row["Nomor"]))
+                        if n: record[f"Spring Plank B{bn} N{n.group(1)}"] = clean_text(row["Hasil Ukur"])
+                    else:
+                        component, bogie_key = key.rsplit("_B", 1)
+                        bn = bogie_key
+                        n = re.search(r"(\d+)$", str(row["Posisi"]))
+                        if n: record[f"{component} B{bn} R{n.group(1)}"] = clean_text(row["Hasil Ukur"])
             try:
                 with st.spinner("Mengunggah dokumentasi dan menyimpan data ke Google Spreadsheet..."):
                     if foto_sebelum:
@@ -539,7 +577,8 @@ elif page == "Edit & Persetujuan":
                     st.info("Menu edit otomatis dinonaktifkan karena data sudah disetujui.")
                 else:
                     st.warning("Data masih dapat diperbaiki. Pastikan seluruh hasil pemeriksaan sudah benar sebelum disetujui.")
-                    edit_frame = pd.DataFrame([{h: selected_record.get(h, "") for h in actual_headers}])
+                    edit_columns = [h for h in actual_headers if h not in ("Mulai Dinas", "Komponen")]
+                    edit_frame = pd.DataFrame([{h: selected_record.get(h, "") for h in edit_columns}])
                     protected = [c for c in ["ID", "Waktu Input", "Dibuat Oleh", "Status Approval", "Disetujui Oleh", "Waktu Approval"] if c in edit_frame.columns]
                     with st.form(f"edit_record_{selected_id}"):
                         edited_frame = st.data_editor(
@@ -623,7 +662,7 @@ elif page == "Riwayat Perawatan":
                     with x:
                         st.write("**Identitas**")
                         st.write(f"Jenis: {row['Jenis Sarana']} | Lokasi: {row['Depo/Lokasi']}")
-                        st.write(f"Mulai dinas: {row['Mulai Dinas']} | P24/P48 Terakhir: {row['P24/P48 Terakhir']}")
+                        st.write(f"P24/P48 Terakhir: {row['P24/P48 Terakhir']}")
                         st.write(f"Bogie 1: {row['Nomor Bogie 1']} | Bogie 2: {row['Nomor Bogie 2']}")
                         st.write("**Kondisi dan tindakan**")
                         st.write("Sebelum:", row["Kondisi Sebelum"])
@@ -637,7 +676,9 @@ elif page == "Riwayat Perawatan":
                         st.write(f"Tebal Center Plate: {row.get('Tebal Center Plate', '')} | Boffer: {row['Tinggi Boffer']}")
                         st.write(f"Brake: {row['Brake']} | Release: {row['Release']} | Langkah torak: {row['Langkah Torak']}")
                         st.write(f"AC: {row['AC']} | CD: {row['CD']} | Tekanan BC: {row['Tekanan BC']}")
-                        st.write(f"Petugas: {row['Nama Petugas']} | NIPP: {row['NIPP']}")
+                        st.write(f"Petugas 1: {row['Nama Petugas']} | NIPP: {row['NIPP']}")
+                        st.write(f"Petugas 2: {row.get('Nama Petugas 2', '')} | NIPP: {row.get('NIPP 2', '')}")
+                        st.write(f"Petugas 3: {row.get('Nama Petugas 3', '')} | NIPP: {row.get('NIPP 3', '')}")
                     if str(row["Jenis Sarana"]).upper() == "B":
                         st.markdown("**Pengukuran khusus Sarana B**")
                         for component in ("Tinggi Frame", "Axle Box"):
@@ -697,7 +738,8 @@ elif page == "Laporan Otomatis":
                 st.markdown("#### Rekap status sarana")
                 st.bar_chart(r["Status SO/TSO"].value_counts())
             st.markdown("#### Data sesuai filter")
-            st.dataframe(r, use_container_width=True, hide_index=True)
+            hidden_legacy = [c for c in ["Mulai Dinas", "Komponen"] if c in r.columns]
+            st.dataframe(r.drop(columns=hidden_legacy), use_container_width=True, hide_index=True)
             safe_start, safe_end = start.isoformat(), end.isoformat()
             st.download_button("⬇️ Unduh CSV", r.to_csv(index=False).encode("utf-8-sig"), file_name=f"laporan_perawatan_{safe_start}_{safe_end}.csv", mime="text/csv")
             st.download_button("⬇️ Unduh Excel", make_excel(r), file_name=f"laporan_perawatan_{safe_start}_{safe_end}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
