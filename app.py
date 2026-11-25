@@ -306,6 +306,7 @@ except Exception as exc:
     st.stop()
 
 id_folder = clean_text(cfg.get("drive_folder_id", "1xucvX1Kq-o7VITSglOBwxXSC-QVONdAE"))
+folder_id = id_folder
 make_public = bool(cfg.get("share_photos_publicly", True))
 user_label = clean_text(cfg.get("nama_pengguna", "Petugas aplikasi")) or "Petugas aplikasi"
 
