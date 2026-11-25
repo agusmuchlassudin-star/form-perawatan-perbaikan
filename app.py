@@ -22,6 +22,7 @@ FLEET_TOTAL = 582  # Angka populasi referensi dari pengguna, bukan jumlah transa
 FLEET_GERBONG = 527
 FLEET_BAGASI = 55
 MAX_PHOTO_MB = 10
+DATABASE_EDITOR_EMAIL = "spoorslosd@gmail.com"
 
 HEADERS = [
     "ID", "Tanggal Perawatan", "Jenis Sarana", "Nomor Sarana", "Mulai Dinas",
@@ -99,6 +100,43 @@ def get_config():
         st.error("Konfigurasi Google belum tersedia. Ikuti petunjuk pada README untuk mengisi .streamlit/secrets.toml.")
         st.stop()
     return st.secrets
+
+def ensure_database_editor_access(drive, spreadsheet_id, email):
+    """Bagikan hanya file Google Spreadsheet database kepada email tujuan sebagai Editor."""
+    email = clean_text(email).lower()
+    if not email:
+        return "Email tujuan belum diatur."
+    permissions = drive.permissions().list(
+        fileId=spreadsheet_id,
+        fields="permissions(id,emailAddress,role,type)",
+        supportsAllDrives=True,
+    ).execute().get("permissions", [])
+    existing = next(
+        (perm for perm in permissions
+         if str(perm.get("emailAddress", "")).lower() == email
+         and perm.get("type") == "user"),
+        None,
+    )
+    if existing:
+        if existing.get("role") in ("owner", "writer", "organizer", "fileOrganizer"):
+            return f"{email} sudah memiliki akses Editor."
+        drive.permissions().update(
+            fileId=spreadsheet_id,
+            permissionId=existing["id"],
+            body={"role": "writer"},
+            fields="id,role",
+            supportsAllDrives=True,
+        ).execute()
+        return f"Akses {email} berhasil ditingkatkan menjadi Editor."
+    drive.permissions().create(
+        fileId=spreadsheet_id,
+        body={"type": "user", "role": "writer", "emailAddress": email},
+        sendNotificationEmail=True,
+        fields="id,role,emailAddress",
+        supportsAllDrives=True,
+    ).execute()
+    return f"Database berhasil dibagikan kepada {email} sebagai Editor."
+
 
 @st.cache_resource(show_spinner="Menghubungkan ke Google...")
 def connect_google():
@@ -223,6 +261,11 @@ def make_excel(frame):
 try:
     sh, ws, log_ws, drive, cfg, actual_headers = connect_google()
     df = load_records(ws)
+    spreadsheet_id = str(cfg.get("spreadsheet_id", "")).strip()
+    try:
+        share_status = ensure_database_editor_access(drive, spreadsheet_id, DATABASE_EDITOR_EMAIL)
+    except Exception as share_exc:
+        share_status = f"Belum berhasil membagikan database ke {DATABASE_EDITOR_EMAIL}: {share_exc}"
 except Exception as exc:
     st.error(f"Tidak berhasil terhubung atau membaca Google Spreadsheet: {exc}")
     st.info("Periksa Spreadsheet ID, izin berbagi kepada email service account, Google Sheets API, dan Google Drive API.")
@@ -239,6 +282,11 @@ with st.sidebar:
     st.markdown("**Depo Gerbong Jakarta Gudang**")
     st.caption("Sistem pencatatan pemeriksaan dan pemeliharaan sarana")
     st.caption(f"Pengguna: {user_label}")
+    if "share_status" in globals():
+        if "berhasil" in share_status.lower() or "sudah memiliki" in share_status.lower():
+            st.success(share_status)
+        else:
+            st.warning(share_status)
     st.divider()
     st.caption("Tips: gunakan nomor sarana yang konsisten agar pencarian riwayat lebih akurat.")
 
@@ -494,7 +542,11 @@ elif page == "Edit & Persetujuan":
                     edit_frame = pd.DataFrame([{h: selected_record.get(h, "") for h in actual_headers}])
                     protected = [c for c in ["ID", "Waktu Input", "Dibuat Oleh", "Status Approval", "Disetujui Oleh", "Waktu Approval"] if c in edit_frame.columns]
                     with st.form(f"edit_record_{selected_id}"):
-                        edited_frame = st.data_editor(edit_frame, key=f"editor_{selected_id}", use_container_width=True, hide_index=True, num_rows="fixed")
+                        edited_frame = st.data_editor(
+                            edit_frame, key=f"editor_{selected_id}", use_container_width=True,
+                            hide_index=True, num_rows="fixed", disabled=protected,
+                            column_config={c: st.column_config.TextColumn(c, width="medium", help="Kolom hasil ukur menerima angka desimal dengan tanda koma (,) misalnya 12,5.") if any(k in c.lower() for k in ["diameter", "flens", "bidang jalan", "tinggi frame", "axle box", "spring plank", "center plate", "boffer", "knuckle", "brake", "release", "torak", "tekanan"]) else st.column_config.TextColumn(c, width="medium") for c in edit_frame.columns}
+                        )
                         save_edit = st.form_submit_button("💾 SIMPAN PERUBAHAN", type="primary", use_container_width=True)
                     if save_edit:
                         # Pemeriksaan ulang status langsung dari Google Sheet agar tidak bisa mengedit data yang baru disetujui.
