@@ -296,9 +296,9 @@ def upload_photo(drive, uploaded, folder_id, filename, make_public=False):
     if folder_id:
         metadata["parents"] = [folder_id]
     media = MediaIoBaseUpload(BytesIO(uploaded.getvalue()), mimetype=uploaded.type or "image/jpeg", resumable=True)
-    result = drive.files().create(body=metadata, media_body=media, fields="id,webViewLink").execute()
+    result = drive.files().create(body=metadata, media_body=media, fields="id,webViewLink", supportsAllDrives=True).execute()
     if make_public:
-        drive.permissions().create(fileId=result["id"], body={"type":"anyone", "role":"reader"}, fields="id").execute()
+        drive.permissions().create(fileId=result["id"], body={"type":"anyone", "role":"reader"}, fields="id", supportsAllDrives=True).execute()
     return result.get("webViewLink", f"https://drive.google.com/file/d/{result['id']}/view")
 
 def load_records(ws):
@@ -381,7 +381,7 @@ except Exception as exc:
     st.info("Periksa Spreadsheet ID, izin berbagi kepada email service account, Google Sheets API, dan Google Drive API.")
     st.stop()
 
-folder_id = clean_text(cfg.get("drive_folder_id", ""))
+folder_id = clean_text(cfg.get("drive_folder_id", "1xucvX1Kq-o7VITSglOBwxXSC-QVONdAE"))
 make_public = bool(cfg.get("share_photos_publicly", False))
 user_label = clean_text(cfg.get("nama_pengguna", "Petugas aplikasi")) or "Petugas aplikasi"
 
