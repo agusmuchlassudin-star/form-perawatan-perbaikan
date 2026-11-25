@@ -306,7 +306,7 @@ except Exception as exc:
     st.stop()
 
 folder_id = clean_text(cfg.get("1xucvX1Kq-o7VITSglOBwxXSC-QVONdAE", ""))
-make_public = bool(cfg.get("share_photos_publicly", False))
+make_public = bool(cfg.get("share_photos_publicly", True))
 user_label = clean_text(cfg.get("nama_pengguna", "Petugas aplikasi")) or "Petugas aplikasi"
 
 with st.sidebar:
