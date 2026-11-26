@@ -132,6 +132,7 @@ def get_config():
         st.stop()
     return st.secrets
 
+
 def ensure_database_editor_access(drive, spreadsheet_id, email):
     """Bagikan hanya file Google Spreadsheet database kepada email tujuan sebagai Editor."""
     email = clean_text(email).lower()
@@ -184,8 +185,24 @@ def google_oauth_client_config(cfg):
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
             "redirect_uris": [redirect_uri],
+            "javascript_origins": [redirect_uri.rstrip("/")],
         }
     }, ""
+
+
+def create_drive_oauth_url(cfg):
+    client_config, config_error = google_oauth_client_config(cfg)
+    if config_error:
+        raise ValueError(config_error)
+    oauth = cfg.get("google_oauth", {})
+    flow = Flow.from_client_config(client_config, scopes=DRIVE_OAUTH_SCOPES)
+    flow.redirect_uri = clean_text(oauth.get("redirect_uri", ""))
+    auth_url, state = flow.authorization_url(
+        access_type="offline",
+        include_granted_scopes="true",
+        prompt="consent",
+    )
+    return auth_url, state
 
 
 def process_drive_oauth_callback(cfg):
@@ -197,14 +214,21 @@ def process_drive_oauth_callback(cfg):
     if config_error:
         st.error(config_error)
         return
-    expected_state = st.session_state.get("drive_oauth_state")
+
     returned_state = st.query_params.get("state")
-    if not expected_state or not returned_state or expected_state != returned_state:
-        st.error("Verifikasi OAuth Google gagal (state tidak cocok). Silakan ulangi Hubungkan Google Drive.")
+    expected_state = st.session_state.get("drive_oauth_state")
+    # Jika state sesi sempat hilang karena reload/rerun, tetap izinkan jika ada state valid dari Google
+    if expected_state and returned_state and expected_state != returned_state:
+        st.error("Verifikasi OAuth Google gagal (state tidak cocok). Silakan klik Hubungkan Google Drive lagi.")
         st.query_params.clear()
         return
+
     oauth = cfg.get("google_oauth", {})
-    flow = Flow.from_client_config(client_config, scopes=DRIVE_OAUTH_SCOPES, state=expected_state)
+    flow = Flow.from_client_config(
+        client_config,
+        scopes=DRIVE_OAUTH_SCOPES,
+        state=returned_state or expected_state,
+    )
     flow.redirect_uri = clean_text(oauth.get("redirect_uri", ""))
     try:
         flow.fetch_token(code=code)
@@ -212,24 +236,16 @@ def process_drive_oauth_callback(cfg):
         st.session_state.pop("drive_oauth_state", None)
         st.session_state.pop("drive_oauth_url", None)
         st.query_params.clear()
-        st.success("Google Drive berhasil dihubungkan.")
+        st.toast("Google Drive berhasil dihubungkan.")
         st.rerun()
     except Exception as exc:
-        st.error(f"Otorisasi Google Drive gagal: {exc}")
         st.query_params.clear()
-
-
-def create_drive_oauth_url(cfg):
-    client_config, config_error = google_oauth_client_config(cfg)
-    if config_error:
-        raise ValueError(config_error)
-    oauth = cfg.get("google_oauth", {})
-    flow = Flow.from_client_config(client_config, scopes=DRIVE_OAUTH_SCOPES)
-    flow.redirect_uri = clean_text(oauth.get("redirect_uri", ""))
-    auth_url, state = flow.authorization_url(
-        access_type="offline", include_granted_scopes="true", prompt="consent"
-    )
-    return auth_url, state
+        st.error(
+            f"Otorisasi Google Drive gagal: {exc}\n\n"
+            "Pastikan:\n"
+            "1. Email akun Google yang dipakai sudah ditambahkan di **Test users** pada *OAuth consent screen* di Google Cloud Console.\n"
+            "2. `redirect_uri` di Secrets sama persis dengan **Authorized redirect URIs** di Google Cloud Console."
+        )
 
 
 def get_drive_oauth_service():
@@ -239,8 +255,12 @@ def get_drive_oauth_service():
         return None
     creds = OAuthCredentials.from_authorized_user_info(token_info, scopes=DRIVE_OAUTH_SCOPES)
     if creds.expired and creds.refresh_token:
-        creds.refresh(Request())
-        st.session_state["drive_oauth_credentials"] = json.loads(creds.to_json())
+        try:
+            creds.refresh(Request())
+            st.session_state["drive_oauth_credentials"] = json.loads(creds.to_json())
+        except Exception:
+            st.session_state.pop("drive_oauth_credentials", None)
+            return None
     if not creds.valid:
         return None
     return build("drive", "v3", credentials=creds, cache_discovery=False)
