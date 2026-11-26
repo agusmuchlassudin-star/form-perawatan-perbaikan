@@ -35,7 +35,7 @@ HEADER = [
     "ID",
     "Tanggal perawatan",
     "Jenis sarana",
-    "Nomor sarana",
+    "Nomor Sarana",
     "Program pemeliharaan",
     "Depo/lokasi",
     "P24/P48 terakhir",
