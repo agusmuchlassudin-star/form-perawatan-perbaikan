@@ -5,10 +5,7 @@ from io import BytesIO
 from uuid import uuid4
 import re
 import hmac
-import hashlib
-import time
 import json
-from urllib.parse import urlsplit
 import gspread
 from google.auth.transport.requests import Request
 from google.oauth2.service_account import Credentials
@@ -108,12 +105,8 @@ hr { border-color:#294760; }
 # Kredensial awal dapat diganti melalui .streamlit/secrets.toml:
 # app_username = "admin"
 # app_password = "GANTI_DENGAN_PASSWORD_KUAT"
-AUTH_USERNAME = str(st.secrets.get("app_username", "admin")).strip()
-AUTH_PASSWORD = str(st.secrets.get("app_password", "")).strip()
-
-if not AUTH_PASSWORD:
-    st.error("Password aplikasi belum dikonfigurasi. Tambahkan app_password pada Streamlit Secrets sebelum menjalankan aplikasi.")
-    st.stop()
+AUTH_USERNAME = str(st.secrets.get("app_username", "admin"))
+AUTH_PASSWORD = str(st.secrets.get("app_password", "KAI@2026!"))
 
 if not st.session_state.get("authenticated", False):
     st.markdown("<div class='hero'><h1>🔐 LOGIN SISTEM DATA PERAWATAN SARANA</h1><p>Masuk menggunakan akun petugas yang telah terdaftar.</p></div>", unsafe_allow_html=True)
@@ -138,7 +131,6 @@ def get_config():
         st.error("Konfigurasi Google belum tersedia. Ikuti petunjuk pada README untuk mengisi .streamlit/secrets.toml.")
         st.stop()
     return st.secrets
-
 
 def ensure_database_editor_access(drive, spreadsheet_id, email):
     """Bagikan hanya file Google Spreadsheet database kepada email tujuan sebagai Editor."""
@@ -192,192 +184,140 @@ def google_oauth_client_config(cfg):
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
             "redirect_uris": [redirect_uri],
-             "javascript_origins": [
-                f"{urlsplit(redirect_uri).scheme}://{urlsplit(redirect_uri).netloc}"
-            ],
         }
     }, ""
 
 
-def _oauth_state_signature(secret, payload):
-    return hmac.new(
-        secret.encode("utf-8"),
-        payload.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest()
-
-
-def create_drive_oauth_url(cfg):
-    """Membuat URL OAuth dengan state bertanda tangan agar tetap dapat
-    diverifikasi jika sesi Streamlit berubah selama redirect Google."""
-    client_config, config_error = google_oauth_client_config(cfg)
-    if config_error:
-        raise ValueError(config_error)
-
-    secret = clean_text(cfg.get("oauth_state_secret", ""))
-    if len(secret) < 32:
-        raise ValueError(
-            "Tambahkan oauth_state_secret minimal 32 karakter pada Streamlit Secrets."
-        )
-
-    oauth = cfg.get("google_oauth", {})
-    payload = f"{int(time.time())}.{uuid4().hex}"
-    state = f"{payload}.{_oauth_state_signature(secret, payload)}"
-
-    flow = Flow.from_client_config(client_config, scopes=DRIVE_OAUTH_SCOPES)
-    flow.redirect_uri = clean_text(oauth.get("redirect_uri", ""))
-    auth_url, _ = flow.authorization_url(
-        state=state,
-        access_type="offline",
-        include_granted_scopes="true",
-        prompt="consent",
-    )
-    return auth_url, state
-
-
 def process_drive_oauth_callback(cfg):
-    """Memvalidasi callback Google dan menyimpan kredensial OAuth pengguna."""
-    oauth_error = st.query_params.get("error")
-    if oauth_error:
-        st.session_state.pop("drive_oauth_state", None)
-        st.session_state.pop("drive_oauth_url", None)
-        st.query_params.clear()
-        st.error(f"Izin Google Drive tidak diberikan: {oauth_error}")
-        return
-
+    """Menangani callback OAuth Google dan menyimpan token pengguna di sesi."""
     code = st.query_params.get("code")
     if not code:
         return
 
     client_config, config_error = google_oauth_client_config(cfg)
     if config_error:
-        st.query_params.clear()
         st.error(config_error)
         return
 
-    returned_state = str(st.query_params.get("state", ""))
     expected_state = st.session_state.get("drive_oauth_state")
-    secret = clean_text(cfg.get("oauth_state_secret", ""))
-
-    try:
-        if len(secret) < 32:
-            raise ValueError("oauth_state_secret belum diatur atau kurang dari 32 karakter.")
-
-        parts = returned_state.split(".")
-        if len(parts) != 3:
-            raise ValueError("Format state OAuth tidak valid.")
-
-        timestamp_text, nonce, signature = parts
-        payload = f"{timestamp_text}.{nonce}"
-        expected_signature = _oauth_state_signature(secret, payload)
-
-        if not hmac.compare_digest(signature, expected_signature):
-            raise ValueError("Tanda tangan state OAuth tidak valid.")
-
-        issued_at = int(timestamp_text)
-        if abs(int(time.time()) - issued_at) > 600:
-            raise ValueError("Permintaan OAuth kedaluwarsa. Silakan mulai koneksi ulang.")
-
-        # Jika state sesi masih tersedia, tetap cocokkan. Jika sesi hilang saat
-        # redirect, integritas state tetap diperiksa melalui HMAC dan batas waktu.
-        if expected_state and not hmac.compare_digest(str(expected_state), returned_state):
-            raise ValueError("State sesi berbeda dengan callback Google.")
-
-        oauth = cfg.get("google_oauth", {})
-        flow = Flow.from_client_config(
-            client_config,
-            scopes=DRIVE_OAUTH_SCOPES,
-            state=returned_state,
-        )
-        flow.redirect_uri = clean_text(oauth.get("redirect_uri", ""))
-        flow.fetch_token(code=code)
-
-        st.session_state["drive_oauth_credentials"] = json.loads(flow.credentials.to_json())
-        st.session_state.pop("drive_oauth_state", None)
-        st.session_state.pop("drive_oauth_url", None)
-        st.query_params.clear()
-        st.toast("Google Drive berhasil dihubungkan.")
-        st.rerun()
-
-    except Exception as exc:
-        st.session_state.pop("drive_oauth_state", None)
-        st.session_state.pop("drive_oauth_url", None)
-        st.query_params.clear()
-        st.error(
-            f"Verifikasi/otorisasi Google Drive gagal: {exc} "
-            "Silakan klik Hubungkan Google Drive lagi. Pastikan redirect_uri "
-            "di Secrets sama persis dengan Authorized redirect URI di Google Cloud Console."
-        )
-
-def process_drive_oauth_callback(cfg):
-    """Menukar authorization code Google menjadi token OAuth pada sesi pengguna."""
-    oauth_error = st.query_params.get("error")
-    if oauth_error:
-        st.session_state.pop("drive_oauth_state", None)
-        st.query_params.clear()
-        st.error(f"Izin Google Drive tidak diberikan: {oauth_error}")
-        return
-
-    code = st.query_params.get("code")
-    if not code:
-        return
-    client_config, config_error = google_oauth_client_config(cfg)
-    if config_error:
-        st.error(config_error)
-        return
-
     returned_state = st.query_params.get("state")
-    expected_state = st.session_state.get("drive_oauth_state")
-    # Verifikasi state wajib untuk mencegah callback OAuth palsu (CSRF).
     if not expected_state or not returned_state or not hmac.compare_digest(
         str(expected_state), str(returned_state)
     ):
-        st.error("Verifikasi OAuth Google gagal atau sesi telah berakhir. Silakan klik Hubungkan Google Drive lagi.")
-        st.session_state.pop("drive_oauth_state", None)
+        st.error(
+            "Verifikasi keamanan OAuth tidak cocok atau sesi browser berubah. "
+            "Klik Hubungkan Google Drive dan ulangi proses pada browser yang sama."
+        )
         st.query_params.clear()
+        st.session_state.pop("drive_oauth_url", None)
+        st.session_state.pop("drive_oauth_state", None)
         return
 
     oauth = cfg.get("google_oauth", {})
     flow = Flow.from_client_config(
         client_config,
         scopes=DRIVE_OAUTH_SCOPES,
-        state=returned_state or expected_state,
+        state=str(expected_state),
     )
     flow.redirect_uri = clean_text(oauth.get("redirect_uri", ""))
     try:
         flow.fetch_token(code=code)
-        st.session_state["drive_oauth_credentials"] = json.loads(flow.credentials.to_json())
+        credentials = flow.credentials
+        if not credentials or not credentials.valid:
+            raise RuntimeError("Google tidak memberikan token OAuth yang valid.")
+        st.session_state["drive_oauth_credentials"] = json.loads(credentials.to_json())
         st.session_state.pop("drive_oauth_state", None)
         st.session_state.pop("drive_oauth_url", None)
+        st.session_state.pop("drive_oauth_error", None)
         st.query_params.clear()
-        st.toast("Google Drive berhasil dihubungkan.")
+        st.success("Google Drive berhasil dihubungkan.")
         st.rerun()
     except Exception as exc:
+        st.error(f"Otorisasi Google Drive gagal: {exc}")
         st.query_params.clear()
-        st.error(
-            f"Otorisasi Google Drive gagal: {exc}\n\n"
-            "Pastikan:\n"
-            "1. Email akun Google yang dipakai sudah ditambahkan di **Test users** pada *OAuth consent screen* di Google Cloud Console.\n"
-            "2. `redirect_uri` di Secrets sama persis dengan **Authorized redirect URIs** di Google Cloud Console."
-        )
+        st.session_state.pop("drive_oauth_state", None)
+        st.session_state.pop("drive_oauth_url", None)
+
+
+def create_drive_oauth_url(cfg):
+    client_config, config_error = google_oauth_client_config(cfg)
+    if config_error:
+        raise ValueError(config_error)
+    oauth = cfg.get("google_oauth", {})
+    flow = Flow.from_client_config(client_config, scopes=DRIVE_OAUTH_SCOPES)
+    flow.redirect_uri = clean_text(oauth.get("redirect_uri", ""))
+    auth_url, state = flow.authorization_url(
+        access_type="offline", include_granted_scopes="true", prompt="consent"
+    )
+    return auth_url, state
 
 
 def get_drive_oauth_service():
-    """Membangun Drive API memakai token akun Google yang menyetujui OAuth."""
+    """Membangun Drive API hanya dengan OAuth akun Google pengguna (bukan Service Account)."""
     token_info = st.session_state.get("drive_oauth_credentials")
     if not token_info:
         return None
-    creds = OAuthCredentials.from_authorized_user_info(token_info, scopes=DRIVE_OAUTH_SCOPES)
-    if creds.expired and creds.refresh_token:
-        try:
+
+    try:
+        if isinstance(token_info, OAuthCredentials):
+            creds = token_info
+        elif isinstance(token_info, dict):
+            creds = OAuthCredentials.from_authorized_user_info(
+                token_info, scopes=DRIVE_OAUTH_SCOPES
+            )
+        else:
+            raise TypeError("Format token OAuth Google Drive tidak dikenali.")
+
+        if creds.expired:
+            if not creds.refresh_token:
+                st.session_state.pop("drive_oauth_credentials", None)
+                return None
             creds.refresh(Request())
-            st.session_state["drive_oauth_credentials"] = json.loads(creds.to_json())
-        except Exception:
+
+        if not creds.valid:
             st.session_state.pop("drive_oauth_credentials", None)
             return None
-    if not creds.valid:
+
+        # Simpan token terbaru setelah refresh agar tidak memakai access token lama.
+        st.session_state["drive_oauth_credentials"] = json.loads(creds.to_json())
+        return build(
+            "drive", "v3", credentials=creds, cache_discovery=False
+        )
+    except Exception as exc:
+        st.session_state.pop("drive_oauth_credentials", None)
+        st.session_state["drive_oauth_error"] = str(exc)
         return None
-    return build("drive", "v3", credentials=creds, cache_discovery=False)
+
+
+def validate_drive_folder(drive, folder_id):
+    """Pastikan ID folder benar dan akun OAuth boleh menambahkan file."""
+    folder_id = clean_text(folder_id)
+    if not folder_id:
+        raise RuntimeError(
+            "ID folder Google Drive belum diisi. Isi drive_folder_id pada Streamlit Secrets."
+        )
+    try:
+        folder = drive.files().get(
+            fileId=folder_id,
+            fields="id,name,mimeType,trashed,capabilities,driveId",
+            supportsAllDrives=True,
+        ).execute()
+    except Exception as exc:
+        raise RuntimeError(
+            "Folder dokumentasi tidak dapat diakses oleh akun OAuth. "
+            "Periksa ID folder dan pastikan akun yang dihubungkan memiliki akses Editor. "
+            f"Detail Google: {exc}"
+        ) from exc
+
+    if folder.get("mimeType") != "application/vnd.google-apps.folder":
+        raise RuntimeError("drive_folder_id bukan ID folder Google Drive.")
+    if folder.get("trashed"):
+        raise RuntimeError("Folder dokumentasi berada di Sampah Google Drive.")
+    if folder.get("capabilities", {}).get("canAddChildren") is False:
+        raise RuntimeError(
+            "Akun OAuth hanya memiliki akses lihat. Berikan akses Editor pada folder dokumentasi."
+        )
+    return folder
 
 
 @st.cache_resource(show_spinner="Menghubungkan ke Google...")
@@ -422,18 +362,68 @@ def connect_google():
     return sh, ws, log_ws, drive, cfg, existing
 
 def upload_photo(drive, uploaded, folder_id, filename, make_public=False):
+    """Unggah dokumentasi foto ke folder Drive melalui OAuth pengguna."""
     if uploaded is None:
         return ""
-    if uploaded.size > MAX_PHOTO_MB * 1024 * 1024:
+    if drive is None:
+        raise RuntimeError(
+            "Google Drive belum terhubung. Hubungkan akun Google melalui menu sebelah kiri."
+        )
+
+    file_bytes = uploaded.getvalue()
+    if not file_bytes:
+        raise RuntimeError(f"File foto {uploaded.name} kosong.")
+    if len(file_bytes) > MAX_PHOTO_MB * 1024 * 1024:
         raise ValueError(f"Ukuran foto {uploaded.name} melebihi {MAX_PHOTO_MB} MB.")
-    metadata = {"name": filename}
-    if folder_id:
-        metadata["parents"] = [folder_id]
-    media = MediaIoBaseUpload(BytesIO(uploaded.getvalue()), mimetype=uploaded.type or "image/jpeg", resumable=True)
-    result = drive.files().create(body=metadata, media_body=media, fields="id,webViewLink", supportsAllDrives=True).execute()
-    if make_public:
-        drive.permissions().create(fileId=result["id"], body={"type":"anyone", "role":"reader"}, fields="id", supportsAllDrives=True).execute()
-    return result.get("webViewLink", f"https://drive.google.com/file/d/{result['id']}/view")
+
+    folder = validate_drive_folder(drive, folder_id)
+    safe_filename = re.sub(r"[^A-Za-z0-9._ -]", "_", str(filename)).strip() or f"foto_{uuid4().hex}.jpg"
+    metadata = {
+        "name": safe_filename,
+        "parents": [folder["id"]],
+        "description": "Dokumentasi Sistem Data Perawatan Sarana",
+    }
+    media = MediaIoBaseUpload(
+        BytesIO(file_bytes),
+        mimetype=uploaded.type or "application/octet-stream",
+        resumable=True,
+    )
+
+    try:
+        result = drive.files().create(
+            body=metadata,
+            media_body=media,
+            fields="id,name,mimeType,webViewLink,parents",
+            supportsAllDrives=True,
+        ).execute()
+        file_id = result.get("id")
+        if not file_id:
+            raise RuntimeError("Google Drive tidak mengembalikan ID file.")
+
+        if make_public:
+            drive.permissions().create(
+                fileId=file_id,
+                body={"type": "anyone", "role": "reader"},
+                fields="id",
+                supportsAllDrives=True,
+            ).execute()
+
+        # Ambil ulang metadata supaya link dan lokasi file terkonfirmasi.
+        verified = drive.files().get(
+            fileId=file_id,
+            fields="id,name,webViewLink,parents",
+            supportsAllDrives=True,
+        ).execute()
+        if folder["id"] not in verified.get("parents", []):
+            raise RuntimeError("Foto terunggah tetapi tidak ditemukan di folder tujuan.")
+        return verified.get("webViewLink") or f"https://drive.google.com/file/d/{file_id}/view"
+    except Exception as exc:
+        raise RuntimeError(
+            f"Upload foto '{uploaded.name}' gagal. Pastikan Google Drive API aktif, "
+            "akun OAuth memiliki akses Editor ke folder, dan folder bukan milik akun yang berbeda. "
+            f"Detail Google: {exc}"
+        ) from exc
+
 
 def load_records(ws):
     rows = ws.get_all_records()
@@ -463,15 +453,13 @@ def update_record_by_id(ws, record_id, record, sheet_headers):
     if "ID" not in headers:
         raise ValueError("Kolom ID tidak ditemukan pada Google Sheet.")
     id_col = headers.index("ID")
-    matching_rows = [
-        idx for idx, row in enumerate(values[1:], start=2)
-        if len(row) > id_col and row[id_col] == record_id
-    ]
-    if not matching_rows:
+    row_number = None
+    for idx, row in enumerate(values[1:], start=2):
+        if len(row) > id_col and row[id_col] == record_id:
+            row_number = idx
+            break
+    if row_number is None:
         raise ValueError("Data tidak ditemukan. Muat ulang halaman dan coba lagi.")
-    if len(matching_rows) > 1:
-        raise ValueError("ID data duplikat ditemukan. Perbaiki ID pada Google Sheet sebelum melanjutkan.")
-    row_number = matching_rows[0]
     old_row = values[row_number - 1]
     updated = [old_row[i] if i < len(old_row) else "" for i in range(len(headers))]
     for i, header in enumerate(headers):
@@ -517,7 +505,7 @@ except Exception as exc:
     st.info("Periksa Spreadsheet ID, izin berbagi kepada email service account, Google Sheets API, dan Google Drive API.")
     st.stop()
 
-folder_id = clean_text(cfg.get("drive_folder_id", "1xucvX1Kq-o7VITSglOBwxXSC-QVONdAE"))
+folder_id = clean_text(cfg.get("drive_folder_id", ""))
 make_public = bool(cfg.get("share_photos_publicly", False))
 user_label = clean_text(cfg.get("nama_pengguna", "Petugas aplikasi")) or "Petugas aplikasi"
 
@@ -531,7 +519,9 @@ with st.sidebar:
     st.divider()
     st.markdown("**Koneksi dokumentasi Google Drive**")
     if drive_oauth is None:
-        st.warning("Google Drive belum dihubungkan. Hubungkan akun Google pemilik folder sebelum mengunggah foto.")
+        st.warning("Google Drive belum terhubung. Hubungkan akun Google pemilik folder sebelum mengunggah foto.")
+        if st.session_state.get("drive_oauth_error"):
+            st.caption(f"Detail token sebelumnya: {st.session_state['drive_oauth_error']}")
         if st.button("Hubungkan Google Drive", use_container_width=True):
             try:
                 auth_url, oauth_state = create_drive_oauth_url(cfg)
@@ -546,6 +536,8 @@ with st.sidebar:
         if st.button("Putuskan Google Drive", use_container_width=True):
             st.session_state.pop("drive_oauth_credentials", None)
             st.session_state.pop("drive_oauth_url", None)
+            st.session_state.pop("drive_oauth_state", None)
+            st.session_state.pop("drive_oauth_error", None)
             st.rerun()
     if st.button("Keluar", use_container_width=True):
         st.session_state["authenticated"] = False
@@ -996,9 +988,7 @@ elif page == "Laporan Otomatis":
             st.stop()
         r = df.copy()
         parsed = pd.to_datetime(r["Tanggal Perawatan"], errors="coerce")
-        valid_dates = parsed.notna()
-        in_range = parsed.dt.date.between(start, end)
-        r = r[valid_dates & in_range]
+        r = r[(parsed.dt.date >= start) & (parsed.dt.date <= end)]
         x,y,z = st.columns(3)
         with x: types = st.multiselect("Jenis sarana", sorted([v for v in r["Jenis Sarana"].dropna().astype(str).unique()]), default=sorted([v for v in r["Jenis Sarana"].dropna().astype(str).unique()]))
         with y: programs = st.multiselect("Program", PROGRAMS, default=PROGRAMS)
