@@ -34,6 +34,7 @@ DATABASE_EDITOR_EMAIL = "spoorslosd@gmail.com"
 HEADER = [
     "ID",
     "Tanggal perawatan",
+    "Bulan",
     "Jenis sarana",
     "Nomor Sarana",
     "Program pemeliharaan",
@@ -876,6 +877,22 @@ elif page == "Input Perawatan":
                         record["Foto Saat Perbaikan"] = upload_photo(drive_oauth, foto_saat, folder_id, f"{record_id}_SAAT_PERBAIKAN_{foto_saat.name}", make_public)
                     if foto_sesudah:
                         record["Foto Sesudah"] = upload_photo(drive_oauth, foto_sesudah, folder_id, f"{record_id}_SESUDAH_{foto_sesudah.name}", make_public)
+                    # --- TAMBAHAN PERBULAN ---
+                    try:
+                        _bulan_id = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
+                        if tanggal:
+                            record["Perbulan"] = f"{_bulan_id[tanggal.month - 1]} {tanggal.year}"
+                            record["Bulan"] = _bulan_id[tanggal.month - 1]
+                            record["Tahun"] = str(tanggal.year)
+                        else:
+                            record["Perbulan"] = ""
+                            record["Bulan"] = ""
+                            record["Tahun"] = ""
+                    except Exception:
+                        record["Perbulan"] = ""
+                        record["Bulan"] = ""
+                        record["Tahun"] = ""
+                    # --- AKHIR TAMBAHAN PERBULAN ---
                     append_record(ws, record, actual_headers)
                     log_activity(log_ws, record_id, "INPUT", user_label, record["Nomor Sarana"], f"Program {program} / {status}")
                 st.success(f"Data berhasil disimpan. Nomor referensi: {record_id}")
