@@ -768,7 +768,7 @@ elif page == "Input Perawatan":
                     df = pd.DataFrame({"Posisi": [f"Roda {i}" for i in range(1, 5)], "Hasil Ukur": [""]*4})
                     special_tables[key] = df
                 
-            if jenis_sarana in ["B", "GD"] and program in ["P3", "P6", "P12", "GD P12"]
+            if jenis_sarana in ["B", "GD"] and program in ["P3", "P6", "P12", "GD P12"]:
                 st.markdown("### 4. Pengukuran khusus Sarana B")
                 list_tampil = [("Tinggi Frame", "Tinggi Frame"), ("Axle Box", "Axle Box")]
                 if jenis_sarana == "B" and program in ["P3", "P6", "P12", "GD P12"]:
