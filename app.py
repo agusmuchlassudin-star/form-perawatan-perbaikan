@@ -35,6 +35,8 @@ HEADER = [
     "ID",
     "Tanggal perawatan",
     "Bulan",
+    "Perbulan",
+    "Tahun",
     "Jenis sarana",
     "Nomor Sarana",
     "Program pemeliharaan",
@@ -491,7 +493,49 @@ def upload_photo(drive, uploaded, folder_id, filename, make_public=False):
             f"Detail Google: {exc}"
         ) from exc
 
+def get_month_sheet(sh, tanggal_obj):
+    # Bikin / cari tab sheet "November 2026"
+    _bulan = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"]
+    _nama = f"{_bulan[tanggal_obj.month-1]} {tanggal_obj.year}"
+    try:
+        ws_m = sh.worksheet(_nama)
+    except gspread.WorksheetNotFound:
+        ws_m = sh.add_worksheet(title=_nama, rows=3000, cols=len(HEADERS))
+        ws_m.update(range_name="A1", values=[HEADERS])
+    # Kalo sheet baru tapi header kosong
+    if not ws_m.row_values(1):
+        ws_m.update(range_name="A1", values=[HEADERS])
+    return ws_m, _nama
 
+def load_all_records(sh, ws_utama):
+    # Gabungin semua sheet perbulan + sheet utama, biar Dashboard / Riwayat / Laporan tetep kebaca
+    all_rows = []
+    try:
+        sheets = sh.worksheets()
+        for s in sheets:
+            if s.title in [LOG_SHEET_NAME]:
+                continue
+            try:
+                rows = s.get_all_records()
+                for r in rows:
+                    if str(r.get("ID","")).strip():
+                        all_rows.append(r)
+            except Exception:
+                continue
+    except Exception:
+        pass
+    if not all_rows:
+        return pd.DataFrame(columns=HEADERS)
+    df_all = pd.DataFrame(all_rows).fillna("").astype(str)
+    for col in HEADERS:
+        if col not in df_all.columns:
+            df_all[col] = ""
+    # Buang duplikat ID kalo ada di 2 sheet
+    df_all = df_all.drop_duplicates(subset=["ID"], keep="first")
+    df_all["Status Approval"] = df_all["Status Approval"].replace("", "Belum Approve")
+    return df_all
+
+def load_records(ws):
 def load_records(ws):
     rows = ws.get_all_records()
     if not rows:
@@ -561,7 +605,7 @@ try:
     sh, ws, log_ws, drive, cfg, actual_headers = connect_google()
     process_drive_oauth_callback(cfg)
     drive_oauth = get_drive_oauth_service()
-    df = load_records(ws)
+    df = load_all_records(sh, ws)
     spreadsheet_id = str(cfg.get("spreadsheet_id", "")).strip()
     try:
         share_status = ensure_database_editor_access(drive, spreadsheet_id, DATABASE_EDITOR_EMAIL)
@@ -877,23 +921,18 @@ elif page == "Input Perawatan":
                         record["Foto Saat Perbaikan"] = upload_photo(drive_oauth, foto_saat, folder_id, f"{record_id}_SAAT_PERBAIKAN_{foto_saat.name}", make_public)
                     if foto_sesudah:
                         record["Foto Sesudah"] = upload_photo(drive_oauth, foto_sesudah, folder_id, f"{record_id}_SESUDAH_{foto_sesudah.name}", make_public)
-                    # --- TAMBAHAN PERBULAN ---
-                    try:
-                        _bulan_id = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
-                        if tanggal:
-                            record["Perbulan"] = f"{_bulan_id[tanggal.month - 1]} {tanggal.year}"
-                            record["Bulan"] = _bulan_id[tanggal.month - 1]
-                            record["Tahun"] = str(tanggal.year)
-                        else:
-                            record["Perbulan"] = ""
-                            record["Bulan"] = ""
-                            record["Tahun"] = ""
-                    except Exception:
-                        record["Perbulan"] = ""
-                        record["Bulan"] = ""
-                        record["Tahun"] = ""
-                    # --- AKHIR TAMBAHAN PERBULAN ---
-                    append_record(ws, record, actual_headers)
+                                       # --- SHEET BARU PERBULAN ---
+                    _bulan_id = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
+                    record["Bulan"] = _bulan_id[tanggal.month - 1]
+                    record["Perbulan"] = f"{_bulan_id[tanggal.month - 1]} {tanggal.year}"
+                    record["Tahun"] = str(tanggal.year)
+                    ws_bulan, nama_sheet_bulan = get_month_sheet(sh, tanggal)
+                    # Header sheet bulan itu
+                    header_bulan = ws_bulan.row_values(1)
+                    if not header_bulan:
+                        header_bulan = HEADERS
+                    append_record(ws_bulan, record, header_bulan)
+                    # --- AKHIR SHEET PERBULAN ---
                     log_activity(log_ws, record_id, "INPUT", user_label, record["Nomor Sarana"], f"Program {program} / {status}")
                 st.success(f"Data berhasil disimpan. Nomor referensi: {record_id}")
                 st.rerun()
