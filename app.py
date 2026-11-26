@@ -536,7 +536,6 @@ def load_all_records(sh, ws_utama):
     return df_all
 
 def load_records(ws):
-def load_records(ws):
     rows = ws.get_all_records()
     if not rows:
         return pd.DataFrame(columns=HEADERS)
