@@ -841,7 +841,6 @@ elif page == "Input Perawatan":
                     "Lain-lain":clean_text(lainnya), "Status":status,
                     "Keterangan":clean_text(keterangan), "Waktu Input":datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "Dibuat Oleh":user_label, "Status Approval":"Belum Approve", "Disetujui Oleh":"", "Waktu Approval":""
-                })
             })
             for idx, (nama, nip) in enumerate(petugas_data, start=1):
                 suffix = "" if idx == 1 else f" {idx}"
