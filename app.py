@@ -99,6 +99,14 @@ HEADER = [
     "Spring plank Bogie 1 N2",
     "Spring plank Bogie 2 N1",
     "Spring plank Bogie 2 N2",
+    "Back to Back B1 R1",
+    "Back to Back B1 R2",
+    "Back to Back B1 R3",
+    "Back to Back B1 R4",
+    "Back to Back B2 R1",
+    "Back to Back B2 R2",
+    "Back to Back B2 R3",
+    "Back to Back B2 R4",
     "Status",
     # --- TAMBAHAN BIAR GAK ILANG ---
     "Foto Sarana",
@@ -749,9 +757,19 @@ elif page == "Input Perawatan":
                         "Flens": st.column_config.TextColumn("Flens", help="Gunakan koma untuk desimal, contoh 28,5."),
                         "Bidang Jalan": st.column_config.TextColumn("Bidang jalan", help="Gunakan koma untuk desimal, contoh 32,5."),
                     })
+            # --- BACK TO BACK, CUMA BUAT P3, P6, P12, GD P12 ---
+            if jenis_sarana == "B" and perawatan in ["P3", "P6", "P12", "GD P12"]:
+                for bn in (1, 2):
+                    key = f"Back to Back_B{bn}"
+                    df = pd.DataFrame({"Roda": [f"R{i}" for i in range(1, 5)], "Back to Back": [""]*4})
+                
+            special_tables[key] = df
             if jenis_sarana == "B":
                 st.markdown("### 4. Pengukuran khusus Sarana B")
-                for component, label in [("Tinggi Frame", "Tinggi Frame"), ("Axle Box", "Axle Box")]:
+                list_tampil = [("Tinggi Frame", "Tinggi Frame"), ("Axle Box", "Axle Box")]
+                if jenis_sarana == "B" and perawatan in ["P3", "P6", "P12", "GD P12"]:
+                    list_tampil.append(("Back to Back", "Back to Back"))
+                for component, label in list_tampil:
                     for bn in (1, 2):
                         st.markdown(f"**{label} — Bogie {bn}**")
                         initial_special = pd.DataFrame({"Posisi": [f"Roda {i}" for i in range(1, 5)], "Hasil Ukur": ["", "", "", ""]})
@@ -906,6 +924,7 @@ elif page == "Input Perawatan":
                         if n: record[f"Spring Plank Bogie {bn} N{n.group(1)}"] = clean_text(row["Hasil Ukur"])
                     else:
                         component, bogie_key = key.rsplit("_B", 1)
+                        component = component.replace("_", " ").strip()
                         bn = bogie_key
                         n = re.search(r"(\d+)$", str(row["Posisi"]))
                         if n: record[f"{component} B{bn} R{n.group(1)}"] = clean_text(row["Hasil Ukur"])
