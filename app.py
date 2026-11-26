@@ -827,7 +827,6 @@ elif page == "Input Perawatan":
             jenis_final = clean_text(jenis_lain) if jenis_sarana == "Lainnya" else jenis_sarana
             record = {h:"" for h in HEADERS}
             record.update({
-                record.update({
                     "ID":record_id, "Tanggal perawatan":tanggal.isoformat(), "Jenis sarana":jenis_final,
                     "Nomor sarana":clean_text(nomor).upper(), "P24/P48 terakhir":p24p48_terakhir.isoformat(),
                     "Program pemeliharaan":program, "Depo/lokasi":clean_text(lokasi),
