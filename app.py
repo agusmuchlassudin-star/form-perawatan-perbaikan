@@ -764,7 +764,6 @@ elif page == "Input Perawatan":
                     df = pd.DataFrame({"Posisi": [f"Roda {i}" for i in range(1, 5)], "Hasil Ukur": [""]*4})
                     special_tables[key] = df
                 
-            special_tables[key] = df
             if jenis_sarana == "B":
                 st.markdown("### 4. Pengukuran khusus Sarana B")
                 list_tampil = [("Tinggi Frame", "Tinggi Frame"), ("Axle Box", "Axle Box")]
