@@ -761,7 +761,8 @@ elif page == "Input Perawatan":
             if jenis_sarana == "B" and perawatan in ["P3", "P6", "P12", "GD P12"]:
                 for bn in (1, 2):
                     key = f"Back to Back_B{bn}"
-                    df = pd.DataFrame({"Roda": [f"R{i}" for i in range(1, 5)], "Back to Back": [""]*4})
+                    df = pd.DataFrame({"Posisi": [f"Roda {i}" for i in range(1, 5)], "Hasil Ukur": [""]*4})
+                    special_tables[key] = df
                 
             special_tables[key] = df
             if jenis_sarana == "B":
