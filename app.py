@@ -120,6 +120,7 @@ HEADER = [
     "Nama Petugas 3",
     "NIPP 3",
 ]
+HEADERS = HEADER
 PROGRAMS = ["P1", "P3", "P6", "P12", "Perbaikan"]
 TYPES = ["GD", "GB", "B", "Lainnya"]
 
