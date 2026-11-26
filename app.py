@@ -202,68 +202,101 @@ def create_drive_oauth_url(cfg):
     client_config, config_error = google_oauth_client_config(cfg)
     if config_error:
         raise ValueError(config_error)
+
     oauth = cfg.get("google_oauth", {})
-    flow = Flow.from_client_config(client_config, scopes=DRIVE_OAUTH_SCOPES)
+    secret = clean_text(cfg.get("oauth_state_secret", ""))
+
+    if len(secret) < 32:
+        raise ValueError(
+            "oauth_state_secret belum diatur atau terlalu pendek."
+        )
+
+    nonce = uuid4().hex
+    signature = hmac.new(
+        secret.encode("utf-8"),
+        nonce.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()
+
+    state = f"{nonce}.{signature}"
+
+    flow = Flow.from_client_config(
+        client_config,
+        scopes=DRIVE_OAUTH_SCOPES,
+        state=state
+    )
+
     flow.redirect_uri = clean_text(oauth.get("redirect_uri", ""))
-    auth_url, state = flow.authorization_url(
+
+    auth_url, _ = flow.authorization_url(
+        state=state,
         access_type="offline",
         include_granted_scopes="true",
-        prompt="consent",
+        prompt="consent"
     )
+
     return auth_url, state
 
 
 def process_drive_oauth_callback(cfg):
-    """Menukar authorization code Google menjadi token OAuth pada sesi pengguna."""
-    oauth_error = st.query_params.get("error")
-    if oauth_error:
-        st.session_state.pop("drive_oauth_state", None)
-        st.query_params.clear()
-        st.error(f"Izin Google Drive tidak diberikan: {oauth_error}")
-        return
-
     code = st.query_params.get("code")
     if not code:
         return
-    client_config, config_error = google_oauth_client_config(cfg)
-    if config_error:
-        st.error(config_error)
-        return
 
-    returned_state = st.query_params.get("state")
-    expected_state = st.session_state.get("drive_oauth_state")
-    # Verifikasi state wajib untuk mencegah callback OAuth palsu (CSRF).
-    if not expected_state or not returned_state or not hmac.compare_digest(
-        str(expected_state), str(returned_state)
-    ):
-        st.error("Verifikasi OAuth Google gagal atau sesi telah berakhir. Silakan klik Hubungkan Google Drive lagi.")
-        st.session_state.pop("drive_oauth_state", None)
-        st.query_params.clear()
-        return
+    returned_state = st.query_params.get("state", "")
 
-    oauth = cfg.get("google_oauth", {})
-    flow = Flow.from_client_config(
-        client_config,
-        scopes=DRIVE_OAUTH_SCOPES,
-        state=returned_state or expected_state,
-    )
-    flow.redirect_uri = clean_text(oauth.get("redirect_uri", ""))
+    secret = clean_text(cfg.get("oauth_state_secret", ""))
+
     try:
+        nonce, signature = returned_state.split(".", 1)
+
+        expected_signature = hmac.new(
+            secret.encode("utf-8"),
+            nonce.encode("utf-8"),
+            hashlib.sha256
+        ).hexdigest()
+
+        if not hmac.compare_digest(
+            signature,
+            expected_signature
+        ):
+            raise ValueError("Tanda tangan OAuth tidak valid.")
+
+        client_config, config_error = google_oauth_client_config(cfg)
+
+        if config_error:
+            raise ValueError(config_error)
+
+        oauth = cfg.get("google_oauth", {})
+
+        flow = Flow.from_client_config(
+            client_config,
+            scopes=DRIVE_OAUTH_SCOPES,
+            state=returned_state
+        )
+
+        flow.redirect_uri = clean_text(
+            oauth.get("redirect_uri", "")
+        )
+
         flow.fetch_token(code=code)
-        st.session_state["drive_oauth_credentials"] = json.loads(flow.credentials.to_json())
+
+        st.session_state["drive_oauth_credentials"] = (
+            json.loads(flow.credentials.to_json())
+        )
+
         st.session_state.pop("drive_oauth_state", None)
         st.session_state.pop("drive_oauth_url", None)
+
         st.query_params.clear()
-        st.toast("Google Drive berhasil dihubungkan.")
+
+        st.success("Google Drive berhasil dihubungkan.")
         st.rerun()
+
     except Exception as exc:
         st.query_params.clear()
-        st.error(
-            f"Otorisasi Google Drive gagal: {exc}\n\n"
-            "Pastikan:\n"
-            "1. Email akun Google yang dipakai sudah ditambahkan di **Test users** pada *OAuth consent screen* di Google Cloud Console.\n"
-            "2. `redirect_uri` di Secrets sama persis dengan **Authorized redirect URIs** di Google Cloud Console."
-        )
+
+        st.error(f"Otorisasi Google Drive gagal: {exc}")
 
 
 def get_drive_oauth_service():
