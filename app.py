@@ -758,8 +758,11 @@ elif page == "Input Perawatan":
                         "Bidang Jalan": st.column_config.TextColumn("Bidang jalan", help="Gunakan koma untuk desimal, contoh 32,5."),
                     })
             # --- BACK TO BACK, CUMA BUAT P3, P6, P12, GD P12 ---
-            if jenis_sarana == "B" and program in ["P3", "P6", "P12",]:
-            if jenis_sarana == "GD" and program in ["P12",]:
+            if (jenis_sarana == "B" and program in ["P3", "P6", "P12", "GD P12"]) or (jenis_sarana == "GD" and program in ["P12"]):
+                for bn in (1, 2):
+                    key = f"Back to Back_B{bn}"
+                    df = pd.DataFrame({"Posisi": [f"Roda {i}" for i in range(1, 5)], "Hasil Ukur": [""]*4})
+                    special_tables[key] = df
                 for bn in (1, 2):
                     key = f"Back to Back_B{bn}"
                     df = pd.DataFrame({"Posisi": [f"Roda {i}" for i in range(1, 5)], "Hasil Ukur": [""]*4})
