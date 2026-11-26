@@ -309,59 +309,6 @@ def process_drive_oauth_callback(cfg):
             "di Secrets sama persis dengan Authorized redirect URI di Google Cloud Console."
         )
 
-def process_drive_oauth_callback(cfg):
-    """Menukar authorization code Google menjadi token OAuth pada sesi pengguna."""
-    oauth_error = st.query_params.get("error")
-    if oauth_error:
-        st.session_state.pop("drive_oauth_state", None)
-        st.query_params.clear()
-        st.error(f"Izin Google Drive tidak diberikan: {oauth_error}")
-        return
-
-    code = st.query_params.get("code")
-    if not code:
-        return
-    client_config, config_error = google_oauth_client_config(cfg)
-    if config_error:
-        st.error(config_error)
-        return
-
-    returned_state = st.query_params.get("state")
-    expected_state = st.session_state.get("drive_oauth_state")
-    # Verifikasi state wajib untuk mencegah callback OAuth palsu (CSRF).
-    if not expected_state or not returned_state or not hmac.compare_digest(
-        str(expected_state), str(returned_state)
-    ):
-        st.error("Verifikasi OAuth Google gagal atau sesi telah berakhir. Silakan klik Hubungkan Google Drive lagi.")
-        st.session_state.pop("drive_oauth_state", None)
-        st.query_params.clear()
-        return
-
-    oauth = cfg.get("google_oauth", {})
-    flow = Flow.from_client_config(
-        client_config,
-        scopes=DRIVE_OAUTH_SCOPES,
-        state=returned_state or expected_state,
-    )
-    flow.redirect_uri = clean_text(oauth.get("redirect_uri", ""))
-    try:
-        flow.fetch_token(code=code)
-        st.session_state["drive_oauth_credentials"] = json.loads(flow.credentials.to_json())
-        st.session_state.pop("drive_oauth_state", None)
-        st.session_state.pop("drive_oauth_url", None)
-        st.query_params.clear()
-        st.toast("Google Drive berhasil dihubungkan.")
-        st.rerun()
-    except Exception as exc:
-        st.query_params.clear()
-        st.error(
-            f"Otorisasi Google Drive gagal: {exc}\n\n"
-            "Pastikan:\n"
-            "1. Email akun Google yang dipakai sudah ditambahkan di **Test users** pada *OAuth consent screen* di Google Cloud Console.\n"
-            "2. `redirect_uri` di Secrets sama persis dengan **Authorized redirect URIs** di Google Cloud Console."
-        )
-
-
 def get_drive_oauth_service():
     """Membangun Drive API memakai token akun Google yang menyetujui OAuth."""
     token_info = st.session_state.get("drive_oauth_credentials")
