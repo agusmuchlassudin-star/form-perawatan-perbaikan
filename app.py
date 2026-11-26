@@ -903,7 +903,7 @@ elif page == "Input Perawatan":
                     if key.startswith("Spring_Plank"):
                         bn = key[-1]
                         n = re.search(r"(\d+)$", str(row["Nomor"]))
-                        if n: record[f"Spring Plank B{bn} N{n.group(1)}"] = clean_text(row["Hasil Ukur"])
+                        if n: record[f"Spring Plank Bogie {bn} N{n.group(1)}"] = clean_text(row["Hasil Ukur"])
                     else:
                         component, bogie_key = key.rsplit("_B", 1)
                         bn = bogie_key
