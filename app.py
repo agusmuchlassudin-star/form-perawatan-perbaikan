@@ -548,6 +548,9 @@ def load_records(ws):
     return df
 
 def append_record(ws, record, sheet_headers):
+    # Samain huruf biar "Nomor sarana" dan "Nomor Sarana" dianggap sama
+    _low = {str(k).lower(): v for k, v in record.items()}
+    ws.append_row([_low.get(str(h).lower(), "") for h in sheet_headers], value_input_option="RAW")
     # PENTING: gunakan urutan header aktual di Google Sheet agar data lama tidak bergeser.
     ws.append_row([record.get(h, "") for h in sheet_headers], value_input_option="RAW")
 
@@ -872,7 +875,7 @@ elif page == "Input Perawatan":
             record = {h:"" for h in HEADERS}
             record.update({
                     "ID":record_id, "Tanggal perawatan":tanggal.isoformat(), "Jenis sarana":jenis_final,
-                    "Nomor sarana":clean_text(nomor).upper(), "P24/P48 terakhir":p24p48_terakhir.isoformat(),
+                    "Nomor Sarana":clean_text(nomor).upper(), "P24/P48 terakhir":p24p48_terakhir.isoformat(),
                     "Program pemeliharaan":program, "Depo/lokasi":clean_text(lokasi),
                     "Nomor bogie 1":clean_text(no_bogie1), "Nomor bogie 2":clean_text(no_bogie2),
                     "Keausan Knucle Bogie 1":clean_text(knuckle1), "Keausan Knucle Bogie 2":clean_text(knuckle2),
