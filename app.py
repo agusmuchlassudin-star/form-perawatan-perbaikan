@@ -767,7 +767,7 @@ elif page == "Input Perawatan":
             if jenis_sarana == "B":
                 st.markdown("### 4. Pengukuran khusus Sarana B")
                 list_tampil = [("Tinggi Frame", "Tinggi Frame"), ("Axle Box", "Axle Box")]
-                if jenis_sarana == "B" and perawatan in ["P3", "P6", "P12", "GD P12"]:
+                if jenis_sarana == "B" and program in ["P3", "P6", "P12", "GD P12"]:
                     list_tampil.append(("Back to Back", "Back to Back"))
                 for component, label in list_tampil:
                     for bn in (1, 2):
