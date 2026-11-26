@@ -551,8 +551,6 @@ def append_record(ws, record, sheet_headers):
     # Samain huruf biar "Nomor sarana" dan "Nomor Sarana" dianggap sama
     _low = {str(k).lower(): v for k, v in record.items()}
     ws.append_row([_low.get(str(h).lower(), "") for h in sheet_headers], value_input_option="RAW")
-    # PENTING: gunakan urutan header aktual di Google Sheet agar data lama tidak bergeser.
-    ws.append_row([record.get(h, "") for h in sheet_headers], value_input_option="RAW")
 
 def log_activity(log_ws, record_id, activity, user, nomor, note=""):
     log_ws.append_row([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), record_id, activity, user, nomor, note], value_input_option="RAW")
