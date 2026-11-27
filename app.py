@@ -1078,11 +1078,11 @@ elif page == "Riwayat Perawatan":
     st.caption(f"Ditemukan {len(result):,} catatan")
     if len(result):
         result = result.copy()
-     if "Tanggal Perawatan" in result.columns:
-         result["_date"] = pd.to_datetime(result["Tanggal Perawatan"], errors="coerce")
-     else:
-         result["_date"] = pd.NaT
-         result = result.sort_values("_date", ascending=False).drop(columns="_date")
+        if "Tanggal Perawatan" in result.columns:
+            result["_date"] = pd.to_datetime(result["Tanggal Perawatan"], errors="coerce")
+        else:
+            result["_date"] = pd.NaT
+        result = result.sort_values("_date", ascending=False).drop(columns="_date")
         visible = [c for c in ["Tanggal Perawatan","Jenis Sarana","Nomor Sarana","Program Pemeliharaan","P24/P48 Terakhir","Depo/Lokasi","Status SO/TSO","Status Approval","Disetujui Oleh","Nama Petugas","Foto Sarana","Foto Sebelum","Foto Saat Perbaikan","Foto Sesudah"] if c in result]
         st.dataframe(result[visible], use_container_width=True, hide_index=True, column_config={
             "Foto Sarana":st.column_config.LinkColumn("Foto sarana", display_text="Buka foto"),
