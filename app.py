@@ -1182,7 +1182,9 @@ elif page == "Laporan Otomatis":
                 rename_map[c] = "Status SO/TSO"
         
         r = r.rename(columns=rename_map)
-        r = r.loc[:, ~r.columns.duplicated(keep="last")]
+        r.columns = [str(c).strip() for c in r.columns]
+        r = r.loc[:, ~pd.Index([c.lower() for c in r.columns]).duplicated(keep="first")]
+        r = r.rename(columns={c: "Tanggal Perawatan" for c in r.columns if c.lower() == "tanggal perawatan"})
         st.write("KOLOM SETELAH FIX:", r.columns.tolist())
         st.write("JUMLAH:", len(r))
         st.write("ISI BARIS 1:", r.head(1).to_dict("records"))
