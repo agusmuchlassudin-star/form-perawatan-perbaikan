@@ -960,17 +960,41 @@ elif page == "Input Perawatan":
                     for field in ["Diameter", "Flens", "Bidang Jalan"]:
                         record[f"{field} B{bn} R{rn}"] = clean_text(row[field])
             for key, table in special_tables.items():
+                # Simpan hasil pengukuran tabel khusus sesuai nama kolom di Google Sheet.
                 for _, row in table.iterrows():
-                    if key.startswith("Spring_Plank"):
-                        bn = key[-1]
-                        n = re.search(r"(\d+)$", str(row["Nomor"]))
-                        if n: record[f"Spring Plank Bogie {bn} N{n.group(1)}"] = clean_text(row["Hasil Ukur"])
-                    else:
-                        component, bogie_key = key.rsplit("_B", 1)
-                        component = component.replace("_", " ").strip()
-                        bn = bogie_key
-                        n = re.search(r"(\d+)$", str(row["Posisi"]))
-                        if n: record[f"{component} B{bn} R{n.group(1)}"] = clean_text(row["Hasil Ukur"])
+                    hasil = clean_text(row.get("Hasil Ukur", ""))
+
+                    # Spring Plank: Spring_Plank_B1 / Spring_Plank_B2
+                    if key.startswith("Spring_Plank_B"):
+                        match_bogie = re.search(r"_B(\\d+)$", key)
+                        match_nomor = re.search(r"(\\d+)$", str(row.get("Nomor", "")))
+                        if match_bogie and match_nomor:
+                            bn = match_bogie.group(1)
+                            nomor = match_nomor.group(1)
+                            record[f"Spring Plank Bogie {bn} N{nomor}"] = hasil
+                        continue
+
+                    # Back to Back memiliki key khusus, tidak mengandung _B.
+                    if key == "Back to Back":
+                        posisi = clean_text(row.get("Posisi", "")).upper()
+                        match = re.fullmatch(r"BOGIE\\s*(1|2)\\s*([AB])", posisi)
+                        if match:
+                            bn, sisi = match.groups()
+                            record[f"Back to Back Bogie {bn} {sisi}"] = hasil
+                        continue
+
+                    # Tinggi Frame dan Axle Box: nama key berakhiran _B1 atau _B2.
+                    match_bogie = re.search(r"_B(\\d+)$", key)
+                    if not match_bogie:
+                        # Abaikan key yang tidak dikenal agar tidak memicu ValueError.
+                        continue
+
+                    component = key[:match_bogie.start()].replace("_", " ").strip()
+                    bn = match_bogie.group(1)
+                    match_roda = re.search(r"(\\d+)$", str(row.get("Posisi", "")))
+                    if match_roda:
+                        roda = match_roda.group(1)
+                        record[f"{component} B{bn} R{roda}"] = hasil
             try:
                 with st.spinner("Mengunggah dokumentasi dan menyimpan data ke Google Spreadsheet..."):
                     if any([foto_sarana, foto_sebelum, foto_saat, foto_sesudah]) and drive_oauth is None:
