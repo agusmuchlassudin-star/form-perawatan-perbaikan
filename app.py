@@ -1318,42 +1318,76 @@ elif page == "Laporan Otomatis":
             st.stop()
         r = df.copy()
         r.columns = [str(c).strip() for c in r.columns]
-        # Samain nama kolom yang hurufnya beda
-        lower_map = {c.lower(): c for c in r.columns}
-        # Cari header beneran
-        for _i, _row in r.iterrows():
-            if any("Tanggal" in str(v) for v in _row.values):
-                r.columns = _row.values
-                r = r.iloc[_i + 1:].reset_index(drop=True)
+
+        # Jika data hasil gabungan memiliki baris header di dalam data,
+        # gunakan baris yang berisi header "Tanggal Perawatan" dan "Jenis sarana".
+        header_row_index = None
+        for row_index, row_values in enumerate(r.itertuples(index=False, name=None)):
+            normalized_values = [
+                str(value).strip().casefold() for value in row_values
+            ]
+            if (
+                any("tanggal perawatan" == value for value in normalized_values)
+                and any("jenis sarana" == value for value in normalized_values)
+            ):
+                header_row_index = row_index
                 break
-        rename_map = {}
-        if "tanggal perawatan" in lower_map:
-            rename_map[lower_map["tanggal perawatan"]] = "Tanggal Perawatan"
-        if "jenis sarana" in lower_map:
-            rename_map[lower_map["jenis sarana"]] = "Jenis Sarana"
-        if "program pemeliharaan" in lower_map:
-            rename_map[lower_map["program pemeliharaan"]] = "Program Pemeliharaan"
-        if "nomor sarana" in lower_map:
-            rename_map[lower_map["nomor sarana"]] = "Nomor Sarana"
-        if "depo/lokasi" in lower_map:
-            rename_map[lower_map["depo/lokasi"]] = "Depo/lokasi"
-        for c in list(r.columns):
-            if c.lower().strip().startswith("status"):
-                rename_map[c] = "Status SO/TSO"
-        
-        r = r.rename(columns=rename_map)
-        r.columns = [str(c).strip() for c in r.columns]
-        r = r.loc[:, ~pd.Index([c.lower() for c in r.columns]).duplicated(keep="first")]
-        r = r.rename(columns={c: "Tanggal Perawatan" for c in r.columns if c.lower() == "tanggal perawatan"})
-        parsed = pd.to_datetime(r["Tanggal Perawatan"], errors="coerce", dayfirst=True)
-        r = r[(parsed.dt.date >= start) & (parsed.dt.date <= end)]
+
+        if header_row_index is not None:
+            new_headers = [
+                str(value).strip() for value in r.iloc[header_row_index].tolist()
+            ]
+            r = r.iloc[header_row_index + 1:].reset_index(drop=True)
+            r.columns = new_headers
+
+        # Normalisasi nama kolom setelah header final ditentukan.
+        # Casefold menangani perbedaan huruf besar/kecil.
+        canonical_names = {
+            "tanggal perawatan": "Tanggal Perawatan",
+            "jenis sarana": "Jenis Sarana",
+            "program pemeliharaan": "Program Pemeliharaan",
+            "nomor sarana": "Nomor Sarana",
+            "depo/lokasi": "Depo/Lokasi",
+            "status so/tso": "Status SO/TSO",
+        }
+        renamed_columns = []
+        for column in r.columns:
+            normalized = str(column).strip().casefold()
+            if normalized.startswith("status"):
+                renamed_columns.append("Status SO/TSO")
+            else:
+                renamed_columns.append(canonical_names.get(normalized, str(column).strip()))
+        r.columns = renamed_columns
+
+        # Hindari kolom ganda setelah normalisasi.
+        r = r.loc[:, ~pd.Index(r.columns).duplicated(keep="first")]
+
+        # Pastikan kolom yang digunakan filter tersedia agar tidak KeyError.
+        for required_column in [
+            "Tanggal Perawatan",
+            "Jenis Sarana",
+            "Program Pemeliharaan",
+            "Status SO/TSO",
+        ]:
+            if required_column not in r.columns:
+                r[required_column] = ""
+
+        parsed = pd.to_datetime(
+            r["Tanggal Perawatan"], errors="coerce", dayfirst=True
+        )
+        valid_dates = parsed.notna()
+        r = r[valid_dates & (parsed.dt.date >= start) & (parsed.dt.date <= end)]
         x,y,z = st.columns(3)
         with x: types = st.multiselect("Jenis sarana", sorted([v for v in r["Jenis Sarana"].dropna().astype(str).unique()]), default=sorted([v for v in r["Jenis Sarana"].dropna().astype(str).unique()]))
         with y: programs = st.multiselect("Program", PROGRAMS, default=PROGRAMS)
         with z: statuses = st.multiselect("Status", ["SO","TSO","Belum ditentukan"], default=["SO","TSO","Belum ditentukan"])
         if not types:
             types = sorted([v for v in r["Jenis Sarana"].dropna().unique()])
-        r = r[r["Jenis Sarana"].isin(types) & r["Program Pemeliharaan"].isin(programs) & r["Status SO/TSO"].isin(statuses)]
+        r = r[
+            r["Jenis Sarana"].astype(str).isin(types)
+            & r["Program Pemeliharaan"].astype(str).isin(programs)
+            & r["Status SO/TSO"].astype(str).isin(statuses)
+        ]
         m1,m2,m3,m4 = st.columns(4)
         m1.metric("Jumlah catatan", f"{len(r):,}")
         m2.metric("GD / GB", f"{int(r['Jenis Sarana'].isin(['GD','GB']).sum()):,}")
