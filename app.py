@@ -803,14 +803,14 @@ elif page == "Input Perawatan":
             column_config={"Posisi": st.column_config.TextColumn("Posisi", width="small"),
                            "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", help="Tanda koma (,)")})
                             
-                for bn in (1, 2):
-                    st.markdown(f"**Spring Plank — Bogie {bn}**")
-                    initial_spring = pd.DataFrame({"Nomor": ["Nomor 1", "Nomor 2"], "Hasil Ukur": ["", ""]})
-                    special_tables[f"Spring_Plank_B{bn}"] = st.data_editor(
-                        initial_spring, key=f"spring_plank_b{bn}", use_container_width=True,
-                        hide_index=True, num_rows="fixed", disabled=["Nomor"],
-                        column_config={"Nomor": st.column_config.TextColumn("Nomor", width="small"),
-                                       "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", help="Tanda koma (,) diperbolehkan, contoh 12,5.")})
+        for bn in (1, 2):
+            st.markdown(f"**Spring Plank — Bogie {bn}**")
+            initial_spring = pd.DataFrame({"Nomor": ["Nomor 1", "Nomor 2"], "Hasil Ukur": ["", ""]})
+            special_tables[f"Spring_Plank_B{bn}"] = st.data_editor(
+                initial_spring, key=f"spring_plank_b{bn}", use_container_width=True,
+                hide_index=True, num_rows="fixed", disabled=["Nomor"],
+                column_config={"Nomor": st.column_config.TextColumn("Nomor", width="small"),
+                               "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", help="Tanda koma (,) diperbolehkan, contoh 12,5.")})
 
         center_plate = ""
         if not jenis_perbaikan and not hide_extra:
