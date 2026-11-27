@@ -654,12 +654,51 @@ def make_excel(frame):
             wsx.column_dimensions[col[0].column_letter].width = width
     return buf.getvalue()
 
+# Normalisasi nama kolom dari Google Sheets.
+# Google Sheets mungkin memiliki header dengan kapitalisasi berbeda,
+# misalnya "Jenis sarana" dan kode aplikasi menggunakan "Jenis Sarana".
+def ensure_dataframe_aliases(dataframe):
+    dataframe = dataframe.copy()
+    # Lookup kolom yang sudah ada tanpa membedakan kapitalisasi/spasi.
+    normalized_lookup = {
+        str(column).strip().casefold(): column
+        for column in dataframe.columns
+    }
+
+    aliases = {
+        "Jenis Sarana": ["Jenis sarana", "Jenis Sarana"],
+        "Nomor Sarana": ["Nomor sarana", "Nomor Sarana"],
+        "Program Pemeliharaan": ["Program pemeliharaan", "Program Pemeliharaan"],
+        "Depo/Lokasi": ["Depo/lokasi", "Depo/Lokasi", "Lokasi"],
+        "P24/P48 Terakhir": ["P24/P48 terakhir", "P24/P48 Terakhir"],
+        "Status SO/TSO": ["Status SO/TSO", "Status"],
+        "Tanggal Perawatan": ["Tanggal perawatan", "Tanggal Perawatan"],
+    }
+
+    for target, possible_sources in aliases.items():
+        if target in dataframe.columns:
+            continue
+        source_column = None
+        for source_name in possible_sources:
+            source_column = normalized_lookup.get(source_name.strip().casefold())
+            if source_column is not None:
+                break
+        if source_column is not None:
+            dataframe[target] = dataframe[source_column]
+        else:
+            # Kolom filter tetap tersedia meskipun sheet masih kosong/versi lama.
+            dataframe[target] = ""
+
+    return dataframe
+
 # --------------------------- LOAD DATA ---------------------------
 try:
     sh, ws, log_ws, drive, cfg, actual_headers = connect_google()
     process_drive_oauth_callback(cfg)
     drive_oauth = get_drive_oauth_service()
     df = load_all_records(sh, ws)
+    df = ensure_dataframe_aliases(df)
+
     spreadsheet_id = str(cfg.get("spreadsheet_id", "")).strip()
     try:
         share_status = ensure_database_editor_access(drive, spreadsheet_id, DATABASE_EDITOR_EMAIL)
@@ -1153,12 +1192,26 @@ elif page == "Riwayat Perawatan":
     f4,f5 = st.columns(2)
     with f4: program_filter = st.multiselect("Program pemeliharaan", PROGRAMS)
     with f5: location_filter = st.text_input("Filter depo / lokasi")
-    result = df.copy()
-    if type_filter != "Semua": result = result[result["Jenis Sarana"].astype(str).str.upper() == type_filter.upper()]
-    if number_filter.strip(): result = result[result["Nomor Sarana"].astype(str).str.contains(number_filter.strip(), case=False, na=False)]
-    if status_filter != "Semua": result = result[result["Status SO/TSO"].astype(str) == status_filter]
-    if program_filter: result = result[result["Program Pemeliharaan"].isin(program_filter)]
-    if location_filter.strip(): result = result[result["Depo/Lokasi"].astype(str).str.contains(location_filter.strip(), case=False, na=False)]
+    result = ensure_dataframe_aliases(df)
+    # Semua kolom filter dipastikan ada sebelum digunakan agar tidak KeyError.
+    history_filter_columns = [
+        "Jenis Sarana", "Nomor Sarana", "Status SO/TSO",
+        "Program Pemeliharaan", "Depo/Lokasi"
+    ]
+    for filter_column in history_filter_columns:
+        if filter_column not in result.columns:
+            result[filter_column] = ""
+
+    if type_filter != "Semua":
+        result = result[result["Jenis Sarana"].astype(str).str.upper() == type_filter.upper()]
+    if number_filter.strip():
+        result = result[result["Nomor Sarana"].astype(str).str.contains(number_filter.strip(), case=False, na=False)]
+    if status_filter != "Semua":
+        result = result[result["Status SO/TSO"].astype(str) == status_filter]
+    if program_filter:
+        result = result[result["Program Pemeliharaan"].astype(str).isin(program_filter)]
+    if location_filter.strip():
+        result = result[result["Depo/Lokasi"].astype(str).str.contains(location_filter.strip(), case=False, na=False)]
     st.caption(f"Ditemukan {len(result):,} catatan")
     if len(result):
         result = result.copy()
