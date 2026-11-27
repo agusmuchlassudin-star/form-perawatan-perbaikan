@@ -1160,6 +1160,12 @@ elif page == "Laporan Otomatis":
         r.columns = [str(c).strip() for c in r.columns]
         # Samain nama kolom yang hurufnya beda
         lower_map = {c.lower(): c for c in r.columns}
+        # Cari header beneran
+        for _i, _row in r.iterrows():
+            if any("Tanggal" in str(v) for v in _row.values):
+                r.columns = _row.values
+                r = r.iloc[_i + 1:].reset_index(drop=True)
+                break
         rename_map = {}
         if "tanggal perawatan" in lower_map:
             rename_map[lower_map["tanggal perawatan"]] = "Tanggal Perawatan"
@@ -1174,11 +1180,9 @@ elif page == "Laporan Otomatis":
         for c in list(r.columns):
             if c.lower().strip().startswith("status"):
                 rename_map[c] = "Status SO/TSO"
+        
         r = r.rename(columns=rename_map)
         r = r.loc[:, ~r.columns.duplicated(keep="last")]
-        st.write("JUMLAH SEBELUM FILTER TANGGAL:", len(r))
-        st.write("CONTOH TANGGAL:", r["Tanggal Perawatan"].head(3).tolist())
-        st.write("KOLOM:", r.columns.tolist())
         parsed = pd.to_datetime(r["Tanggal Perawatan"], errors="coerce", dayfirst=True)
         r = r[(parsed.dt.date >= start) & (parsed.dt.date <= end)]
         x,y,z = st.columns(3)
