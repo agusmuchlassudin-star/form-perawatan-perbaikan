@@ -1183,6 +1183,9 @@ elif page == "Laporan Otomatis":
         
         r = r.rename(columns=rename_map)
         r = r.loc[:, ~r.columns.duplicated(keep="last")]
+        st.write("KOLOM SETELAH FIX:", r.columns.tolist())
+        st.write("JUMLAH:", len(r))
+        st.write("ISI BARIS 1:", r.head(1).to_dict("records"))
         parsed = pd.to_datetime(r["Tanggal Perawatan"], errors="coerce", dayfirst=True)
         r = r[(parsed.dt.date >= start) & (parsed.dt.date <= end)]
         x,y,z = st.columns(3)
