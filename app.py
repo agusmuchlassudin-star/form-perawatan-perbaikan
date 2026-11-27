@@ -559,6 +559,36 @@ def load_all_records(sh, ws_utama):
     df_all["Status Approval"] = df_all["Status Approval"].replace("", "Belum Approve")
     return df_all
 
+def find_record_worksheet(sh, record_id):
+    """Cari tab yang benar-benar menyimpan ID, termasuk tab bulanan."""
+    target_id = str(record_id or "").strip()
+    if not target_id:
+        return None
+
+    try:
+        worksheets = sh.worksheets()
+    except Exception:
+        return None
+
+    for worksheet in worksheets:
+        if worksheet.title == LOG_SHEET_NAME:
+            continue
+        try:
+            values = worksheet.get_all_values()
+            if not values:
+                continue
+            headers = [str(h).strip() for h in values[0]]
+            if "ID" not in headers:
+                continue
+            id_col = headers.index("ID")
+            for row in values[1:]:
+                if id_col < len(row) and str(row[id_col]).strip() == target_id:
+                    return worksheet
+        except Exception:
+            # Tab yang tidak bisa dibaca dilewati; pencarian lanjut ke tab berikutnya.
+            continue
+    return None
+
 def load_records(ws):
     rows = ws.get_all_records()
     if not rows:
@@ -1070,10 +1100,11 @@ elif page == "Edit & Persetujuan":
                         save_edit = st.form_submit_button("💾 SIMPAN PERUBAHAN", type="primary", use_container_width=True)
                     if save_edit:
                         # Pemeriksaan ulang status langsung dari Google Sheet agar tidak bisa mengedit data yang baru disetujui.
-                        fresh = load_records(ws)
-                        current = fresh[fresh["ID"].astype(str) == selected_id] if "ID" in fresh.columns else pd.DataFrame()
-                        if current.empty:
-                            st.error("Perubahan ditolak: data dengan ID tersebut tidak ditemukan di Google Spreadsheet. Muat ulang daftar dan pilih data yang masih tersedia.")
+                        fresh = load_all_records(sh, ws)
+                        current = fresh[fresh["ID"].astype(str).str.strip() == str(selected_id).strip()] if "ID" in fresh.columns else pd.DataFrame()
+                        target_ws = find_record_worksheet(sh, selected_id)
+                        if current.empty or target_ws is None:
+                            st.error("Perubahan ditolak: ID tidak ditemukan pada tab utama maupun tab bulanan Google Spreadsheet. Muat ulang data dan pilih catatan yang masih tersedia.")
                         else:
                             current_status = clean_text(current.iloc[0].get("Status Approval")) or "Belum Approve"
                             if current_status == "Disetujui":
@@ -1082,7 +1113,7 @@ elif page == "Edit & Persetujuan":
                                 updated_record = edited_frame.iloc[0].to_dict()
                                 updated_record["Status Approval"] = "Belum Approve"
                                 try:
-                                    update_record_by_id(ws, selected_id, updated_record, actual_headers)
+                                    update_record_by_id(target_ws, selected_id, updated_record, target_ws.row_values(1))
                                     log_activity(log_ws, selected_id, "EDIT", user_label, clean_text(updated_record.get("Nomor Sarana")), "Perubahan data sebelum persetujuan")
                                     st.success("Perubahan berhasil disimpan.")
                                     st.rerun()
@@ -1092,10 +1123,11 @@ elif page == "Edit & Persetujuan":
                     confirm_approve = st.checkbox("Saya sudah memeriksa dan menyatakan data ini benar untuk disetujui.", key=f"confirm_approve_{selected_id}")
                     if st.button("✅ SETUJUI DATA", type="primary", disabled=not confirm_approve, key=f"approve_{selected_id}", use_container_width=True):
                         # Validasi status dilakukan kembali di sisi server sebelum mengunci baris.
-                        fresh = load_records(ws)
-                        current = fresh[fresh["ID"].astype(str) == selected_id] if "ID" in fresh.columns else pd.DataFrame()
-                        if current.empty:
-                            st.error("Persetujuan dibatalkan: data dengan ID tersebut tidak ditemukan di Google Spreadsheet. Muat ulang daftar dan pilih data yang masih tersedia.")
+                        fresh = load_all_records(sh, ws)
+                        current = fresh[fresh["ID"].astype(str).str.strip() == str(selected_id).strip()] if "ID" in fresh.columns else pd.DataFrame()
+                        target_ws = find_record_worksheet(sh, selected_id)
+                        if current.empty or target_ws is None:
+                            st.error("Persetujuan dibatalkan: ID tidak ditemukan pada tab utama maupun tab bulanan Google Spreadsheet. Muat ulang data dan pilih catatan yang masih tersedia.")
                         else:
                             current_status = clean_text(current.iloc[0].get("Status Approval")) or "Belum Approve"
                             if current_status == "Disetujui":
@@ -1104,7 +1136,7 @@ elif page == "Edit & Persetujuan":
                                 approved_record = current.iloc[0].to_dict()
                                 approved_record.update({"Status Approval":"Disetujui", "Disetujui Oleh":user_label, "Waktu Approval":datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
                                 try:
-                                    update_record_by_id(ws, selected_id, approved_record, actual_headers)
+                                    update_record_by_id(target_ws, selected_id, approved_record, target_ws.row_values(1))
                                     log_activity(log_ws, selected_id, "APPROVE", user_label, clean_text(approved_record.get("Nomor Sarana")), "Data disetujui dan dikunci")
                                     st.success("Data berhasil disetujui. Menu edit untuk catatan ini telah dinonaktifkan.")
                                     st.rerun()
