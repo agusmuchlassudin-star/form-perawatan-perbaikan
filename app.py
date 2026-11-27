@@ -793,18 +793,22 @@ elif page == "Input Perawatan":
                         "Flens": st.column_config.TextColumn("Flens", width=110, help="Gunakan koma untuk desimal, contoh 28,5."),
                         "Bidang Jalan": st.column_config.TextColumn("Bidang jalan", width=140, help="Gunakan koma untuk desimal, contoh 32,5."),
                     })
-           # --- BACK TO BACK, CUMA BUAT P3, P6, P12, GD P12 ---
-        if (jenis_sarana == "B" and program in ["P3", "P6", "P12", "GD P12"]) or (jenis_sarana == "GD" and program in ["GD P12"]):
-            key = "Back to Back"
-            df = pd.DataFrame({"Posisi": ["Bogie 1 A", "Bogie 1 B", "Bogie 2 A", "Bogie 2 B"], "Hasil Ukur": [""]*4})
-            special_tables[key] = df
+        # Back to Back ditampilkan untuk Sarana B program P3/P6/P12,
+        # serta Sarana GD khusus program P12.
+        show_back_to_back = (
+            (jenis_sarana == "B" and program in ["P3", "P6", "P12"])
+            or (jenis_sarana == "GD" and program == "P12")
+        )
+        show_bogie_b_measurements = jenis_sarana == "B" and program in ["P3", "P6", "P12"]
 
         list_tampil = []
-        if (jenis_sarana == "B" and program in ["P3", "P6", "P12", "GD P12"]) or (jenis_sarana == "GD" and program in ["GD P12"]):
-                st.markdown("### 4. Pengukuran khusus Sarana B")
-                list_tampil = [("Tinggi Frame", "Tinggi Frame"), ("Axle Box", "Axle Box")]
-                if jenis_sarana == "B" and program in ["P3", "P6", "P12", "GD P12"]:
-                    list_tampil.append(("Back to Back", "Back to Back"))
+        if show_bogie_b_measurements:
+            st.markdown("### 4. Pengukuran khusus Sarana B")
+            list_tampil = [("Tinggi Frame", "Tinggi Frame"), ("Axle Box", "Axle Box")]
+            list_tampil.append(("Back to Back", "Back to Back"))
+        elif jenis_sarana == "GD" and show_back_to_back:
+            st.markdown("### 4. Pengukuran Back to Back")
+            list_tampil = [("Back to Back", "Back to Back")]
         for component, label in list_tampil:
             if component == "Back to Back":
                 st.markdown(f"**{label}**")
