@@ -990,7 +990,7 @@ elif page == "Edit & Persetujuan":
     if df.empty:
         st.info("Belum ada data perawatan.")
     else:
-                pending = df.copy()
+        pending = df.copy()
         if "Status Approval" not in pending.columns:
             pending["Status Approval"] = "Belum Approve"
         else:
