@@ -706,7 +706,7 @@ if page == "Dashboard":
     a.metric("Perawatan Bulan Ini", f"{this_month:,}")
     b.metric("Status SO", f"{so_count:,}")
     c.metric("Status TSO", f"{tso_count:,}")
-        if total_record:
+    if total_record:
         left,right = st.columns([1,1])
         with left:
             st.markdown("### Catatan berdasarkan program")
