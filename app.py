@@ -99,14 +99,10 @@ HEADER = [
     "Spring plank Bogie 1 N2",
     "Spring plank Bogie 2 N1",
     "Spring plank Bogie 2 N2",
-    "Back to Back B1 R1",
-    "Back to Back B1 R2",
-    "Back to Back B1 R3",
-    "Back to Back B1 R4",
-    "Back to Back B2 R1",
-    "Back to Back B2 R2",
-    "Back to Back B2 R3",
-    "Back to Back B2 R4",
+    "Back to Back Bogie 1 A",
+    "Back to Back Bogie 1 B",
+    "Back to Back Bogie 2 A",
+    "Back to Back Bogie 2 B",
     "Status",
     # --- TAMBAHAN BIAR GAK ILANG ---
     "Foto Sarana",
@@ -777,16 +773,11 @@ elif page == "Input Perawatan":
                         "Flens": st.column_config.TextColumn("Flens", help="Gunakan koma untuk desimal, contoh 28,5."),
                         "Bidang Jalan": st.column_config.TextColumn("Bidang jalan", help="Gunakan koma untuk desimal, contoh 32,5."),
                     })
-            # --- BACK TO BACK, CUMA BUAT P3, P6, P12, GD P12 ---
+           # --- BACK TO BACK, CUMA BUAT P3, P6, P12, GD P12 ---
         if (jenis_sarana == "B" and program in ["P3", "P6", "P12", "GD P12"]) or (jenis_sarana == "GD" and program in ["GD P12"]):
-                for bn in (1, 2):
-                    key = f"Back to Back_B{bn}"
-                    df = pd.DataFrame({"Posisi": [f"Roda {i}" for i in range(1, 5)], "Hasil Ukur": [""]*4})
-                    special_tables[key] = df
-                for bn in (1, 2):
-                    key = f"Back to Back_B{bn}"
-                    df = pd.DataFrame({"Posisi": [f"Roda {i}" for i in range(1, 5)], "Hasil Ukur": [""]*4})
-                    special_tables[key] = df
+            key = "Back to Back"
+            df = pd.DataFrame({"Posisi": ["Bogie 1 A", "Bogie 1 B", "Bogie 2 A", "Bogie 2 B"], "Hasil Ukur": [""]*4})
+            special_tables[key] = df
                 
         if (jenis_sarana == "B" and program in ["P3", "P6", "P12", "GD P12"]) or (jenis_sarana == "GD" and program in ["GD P12"]):
                 st.markdown("### 4. Pengukuran khusus Sarana B")
@@ -794,9 +785,23 @@ elif page == "Input Perawatan":
                 if jenis_sarana == "B" and program in ["P3", "P6", "P12", "GD P12"]:
                     list_tampil.append(("Back to Back", "Back to Back"))
                 for component, label in list_tampil:
-                    for bn in (1, 2):
-                        st.markdown(f"**{label} — Bogie {bn}**")
-                        initial_special = pd.DataFrame({"Posisi": [f"Roda {i}" for i in range(1, 5)], "Hasil Ukur": ["", "", "", ""]})
+                    if component == "Back to Back":
+                        st.markdown(f"**{label}**")
+                        initial_special = pd.DataFrame({"Posisi": ["Bogie 1 A", "Bogie 1 B", "Bogie 2 A", "Bogie 2 B"], "Hasil Ukur": ["", "", "", ""]})
+                        special_tables[f"{component}"] = st.data_editor(
+                            initial_special, key=f"{component.lower().replace(' ', '_')}",
+                            use_container_width=True, hide_index=True, num_rows="fixed", disabled=["Posisi"],
+                            column_config={"Posisi": st.column_config.TextColumn("Posisi", width="small"),
+                           "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", help="Tanda koma (,)")})
+        continue
+    for bn in (1, 2):
+        st.markdown(f"**{label} - Bogie {bn}**")
+        initial_special = pd.DataFrame({"Posisi": [f"Roda {i}" for i in range(1, 5)], "Hasil Ukur": ["", "", "", ""]})
+        special_tables[f"{component}_B{bn}"] = st.data_editor(
+            initial_special, key=f"{component.lower().replace(' ', '_')}_b{bn}",
+            use_container_width=True, hide_index=True, num_rows="fixed", disabled=["Posisi"],
+            column_config={"Posisi": st.column_config.TextColumn("Posisi", width="small"),
+                           "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", help="Tanda koma (,)")})
                         special_tables[f"{component}_B{bn}"] = st.data_editor(
                             initial_special, key=f"{component.lower().replace(' ', '_')}_b{bn}",
                             use_container_width=True, hide_index=True, num_rows="fixed", disabled=["Posisi"],
