@@ -1156,6 +1156,8 @@ elif page == "Laporan Otomatis":
             st.error("Tanggal awal tidak boleh melewati tanggal akhir.")
             st.stop()
         r = df.copy()
+        r.columns = [str(c).strip() for c in r.columns]
+        st.write("KOLOM ASLI DI SHEET:", list(r.columns))
         parsed = pd.to_datetime(r["Tanggal Perawatan"], errors="coerce")
         r = r[(parsed.dt.date >= start) & (parsed.dt.date <= end)]
         x,y,z = st.columns(3)
