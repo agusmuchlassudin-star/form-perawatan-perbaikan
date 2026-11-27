@@ -155,6 +155,26 @@ div[data-testid="stMetric"] label, div[data-testid="stMetric"] [data-testid="stM
 input, textarea, [data-baseweb="select"] > div { background-color:#f8fbff !important; color:#12283b !important; border-radius:7px !important; }
 label, .stMarkdown, p, h1, h2, h3, h4 { color:#edf4fb; }
 [data-testid="stDataFrame"] { border:1px solid #294760; border-radius:10px; }
+/* Tabel pengukuran: tampilan konsisten di HP, tablet, dan komputer.
+   Lebar kolom ditetapkan melalui column_config (piksel); layar sempit
+   menggeser tabel secara horizontal, bukan mengubah urutan kolom. */
+[data-testid="stDataEditor"] {
+    border: 1px solid #294760 !important;
+    border-radius: 10px !important;
+    overflow-x: auto !important;
+}
+[data-testid="stDataEditor"] [role="columnheader"] {
+    min-height: 42px !important;
+    height: 42px !important;
+    white-space: nowrap !important;
+    font-size: 13px !important;
+}
+[data-testid="stDataEditor"] [role="gridcell"] {
+    min-height: 42px !important;
+    height: 42px !important;
+    white-space: nowrap !important;
+    font-size: 14px !important;
+}
 /* Pastikan tulisan hasil pengukuran di tabel input bogie terbaca jelas */
 [data-testid="stDataEditor"] [role="grid"],
 [data-testid="stDataEditor"] [role="gridcell"],
@@ -768,10 +788,10 @@ elif page == "Input Perawatan":
                 wheel_tables[bogie_num] = st.data_editor(
                     initial, key=f"wheel_table_{bogie_num}", use_container_width=True, hide_index=True,
                     disabled=["Roda"], num_rows="fixed", column_config={
-                        "Roda": st.column_config.TextColumn("Posisi roda", width="small"),
-                        "Diameter": st.column_config.TextColumn("Diameter", help="Gunakan koma untuk desimal, contoh 845,5."),
-                        "Flens": st.column_config.TextColumn("Flens", help="Gunakan koma untuk desimal, contoh 28,5."),
-                        "Bidang Jalan": st.column_config.TextColumn("Bidang jalan", help="Gunakan koma untuk desimal, contoh 32,5."),
+                        "Roda": st.column_config.TextColumn("Posisi roda", width=110),
+                        "Diameter": st.column_config.TextColumn("Diameter", width=120, help="Gunakan koma untuk desimal, contoh 845,5."),
+                        "Flens": st.column_config.TextColumn("Flens", width=110, help="Gunakan koma untuk desimal, contoh 28,5."),
+                        "Bidang Jalan": st.column_config.TextColumn("Bidang jalan", width=140, help="Gunakan koma untuk desimal, contoh 32,5."),
                     })
            # --- BACK TO BACK, CUMA BUAT P3, P6, P12, GD P12 ---
         if (jenis_sarana == "B" and program in ["P3", "P6", "P12", "GD P12"]) or (jenis_sarana == "GD" and program in ["GD P12"]):
@@ -789,12 +809,12 @@ elif page == "Input Perawatan":
             if component == "Back to Back":
                 st.markdown(f"**{label}**")
                 initial_special = pd.DataFrame({"Posisi": ["Bogie 1 A", "Bogie 1 B", "Bogie 2 A", "Bogie 2 B"], "Hasil Ukur": ["", "", "", ""]})
-                special_tables[f"{component}"] = st.data_editor(initial_special, key=f"{component.lower().replace(' ', '_')}", use_container_width=True, hide_index=True, num_rows="fixed", disabled=["Posisi"], column_config={"Posisi": st.column_config.TextColumn("Posisi", width="small"), "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", help="Tanda koma (,)")})
+                special_tables[f"{component}"] = st.data_editor(initial_special, key=f"{component.lower().replace(' ', '_')}", use_container_width=True, hide_index=True, num_rows="fixed", disabled=["Posisi"], column_config={"Posisi": st.column_config.TextColumn("Posisi", width=150), "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", width=160, help="Tanda koma (,)")})
                 continue
             for bn in (1, 2):
                 st.markdown(f"**{label} - Bogie {bn}**")
                 initial_special = pd.DataFrame({"Posisi": [f"Roda {i}" for i in range(1, 5)], "Hasil Ukur": ["", "", "", ""]})
-                special_tables[f"{component}_B{bn}"] = st.data_editor(initial_special, key=f"{component.lower().replace(' ', '_')}_b{bn}", use_container_width=True, hide_index=True, num_rows="fixed", disabled=["Posisi"], column_config={"Posisi": st.column_config.TextColumn("Posisi", width="small"), "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", help="Tanda koma (,)")})
+                special_tables[f"{component}_B{bn}"] = st.data_editor(initial_special, key=f"{component.lower().replace(' ', '_')}_b{bn}", use_container_width=True, hide_index=True, num_rows="fixed", disabled=["Posisi"], column_config={"Posisi": st.column_config.TextColumn("Posisi", width=150), "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", width=160, help="Tanda koma (,)")})
        
         if jenis_sarana == "B" and program in ["P3", "P6", "P12"]:                   
             for bn in (1, 2):
@@ -803,8 +823,8 @@ elif page == "Input Perawatan":
                 special_tables[f"Spring_Plank_B{bn}"] = st.data_editor(
                     initial_spring, key=f"spring_plank_b{bn}", use_container_width=True,
             hide_index=True, num_rows="fixed", disabled=["Nomor"],
-            column_config={"Nomor": st.column_config.TextColumn("Nomor", width="small"),
-                            "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", help="Tanda koma (,) diperbolehkan, contoh 12,5.")})
+            column_config={"Nomor": st.column_config.TextColumn("Nomor", width=150),
+                            "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", width=160, help="Tanda koma (,) diperbolehkan, contoh 12,5.")})
 
         center_plate = ""
         if not jenis_perbaikan and not hide_extra:
