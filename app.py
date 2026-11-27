@@ -1182,6 +1182,8 @@ elif page == "Laporan Otomatis":
         with x: types = st.multiselect("Jenis sarana", sorted([v for v in r["Jenis Sarana"].dropna().astype(str).unique()]), default=sorted([v for v in r["Jenis Sarana"].dropna().astype(str).unique()]))
         with y: programs = st.multiselect("Program", PROGRAMS, default=PROGRAMS)
         with z: statuses = st.multiselect("Status", ["SO","TSO","Belum ditentukan"], default=["SO","TSO","Belum ditentukan"])
+        if not types:
+            types = sorted([v for v in r["Jenis Sarana"].dropna().unique()])
         r = r[r["Jenis Sarana"].isin(types) & r["Program Pemeliharaan"].isin(programs) & r["Status SO/TSO"].isin(statuses)]
         m1,m2,m3,m4 = st.columns(4)
         m1.metric("Jumlah catatan", f"{len(r):,}")
