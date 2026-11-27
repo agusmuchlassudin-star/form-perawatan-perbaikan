@@ -1047,39 +1047,45 @@ elif page == "Edit & Persetujuan":
                     if save_edit:
                         # Pemeriksaan ulang status langsung dari Google Sheet agar tidak bisa mengedit data yang baru disetujui.
                         fresh = load_records(ws)
-                        current = fresh[fresh["ID"].astype(str) == selected_id]
-                        current_status = "" if current.empty else (clean_text(current.iloc[0].get("Status Approval")) or "Belum Approve")
-                        if current_status == "Disetujui":
-                            st.error("Perubahan ditolak: data sudah disetujui oleh pengguna lain.")
+                        current = fresh[fresh["ID"].astype(str) == selected_id] if "ID" in fresh.columns else pd.DataFrame()
+                        if current.empty:
+                            st.error("Perubahan ditolak: data dengan ID tersebut tidak ditemukan di Google Spreadsheet. Muat ulang daftar dan pilih data yang masih tersedia.")
                         else:
-                            updated_record = edited_frame.iloc[0].to_dict()
-                            updated_record["Status Approval"] = "Belum Approve"
-                            try:
-                                update_record_by_id(ws, selected_id, updated_record, actual_headers)
-                                log_activity(log_ws, selected_id, "EDIT", user_label, clean_text(updated_record.get("Nomor Sarana")), "Perubahan data sebelum persetujuan")
-                                st.success("Perubahan berhasil disimpan.")
-                                st.rerun()
-                            except Exception as exc:
-                                st.error(f"Gagal menyimpan perubahan: {exc}")
+                            current_status = clean_text(current.iloc[0].get("Status Approval")) or "Belum Approve"
+                            if current_status == "Disetujui":
+                                st.error("Perubahan ditolak: data sudah disetujui oleh pengguna lain.")
+                            else:
+                                updated_record = edited_frame.iloc[0].to_dict()
+                                updated_record["Status Approval"] = "Belum Approve"
+                                try:
+                                    update_record_by_id(ws, selected_id, updated_record, actual_headers)
+                                    log_activity(log_ws, selected_id, "EDIT", user_label, clean_text(updated_record.get("Nomor Sarana")), "Perubahan data sebelum persetujuan")
+                                    st.success("Perubahan berhasil disimpan.")
+                                    st.rerun()
+                                except Exception as exc:
+                                    st.error(f"Gagal menyimpan perubahan: {exc}")
                     st.divider()
                     confirm_approve = st.checkbox("Saya sudah memeriksa dan menyatakan data ini benar untuk disetujui.", key=f"confirm_approve_{selected_id}")
                     if st.button("✅ SETUJUI DATA", type="primary", disabled=not confirm_approve, key=f"approve_{selected_id}", use_container_width=True):
                         # Validasi status dilakukan kembali di sisi server sebelum mengunci baris.
                         fresh = load_records(ws)
-                        current = fresh[fresh["ID"].astype(str) == selected_id]
-                        current_status = "" if current.empty else (clean_text(current.iloc[0].get("Status Approval")) or "Belum Approve")
-                        if current_status == "Disetujui":
-                            st.error("Data ini sudah disetujui sebelumnya.")
+                        current = fresh[fresh["ID"].astype(str) == selected_id] if "ID" in fresh.columns else pd.DataFrame()
+                        if current.empty:
+                            st.error("Persetujuan dibatalkan: data dengan ID tersebut tidak ditemukan di Google Spreadsheet. Muat ulang daftar dan pilih data yang masih tersedia.")
                         else:
-                            approved_record = current.iloc[0].to_dict()
-                            approved_record.update({"Status Approval":"Disetujui", "Disetujui Oleh":user_label, "Waktu Approval":datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
-                            try:
-                                update_record_by_id(ws, selected_id, approved_record, actual_headers)
-                                log_activity(log_ws, selected_id, "APPROVE", user_label, clean_text(approved_record.get("Nomor Sarana")), "Data disetujui dan dikunci")
-                                st.success("Data berhasil disetujui. Menu edit untuk catatan ini telah dinonaktifkan.")
-                                st.rerun()
-                            except Exception as exc:
-                                st.error(f"Gagal menyetujui data: {exc}")
+                            current_status = clean_text(current.iloc[0].get("Status Approval")) or "Belum Approve"
+                            if current_status == "Disetujui":
+                                st.error("Data ini sudah disetujui sebelumnya.")
+                            else:
+                                approved_record = current.iloc[0].to_dict()
+                                approved_record.update({"Status Approval":"Disetujui", "Disetujui Oleh":user_label, "Waktu Approval":datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+                                try:
+                                    update_record_by_id(ws, selected_id, approved_record, actual_headers)
+                                    log_activity(log_ws, selected_id, "APPROVE", user_label, clean_text(approved_record.get("Nomor Sarana")), "Data disetujui dan dikunci")
+                                    st.success("Data berhasil disetujui. Menu edit untuk catatan ini telah dinonaktifkan.")
+                                    st.rerun()
+                                except Exception as exc:
+                                    st.error(f"Gagal menyetujui data: {exc}")
 
 # --------------------------- HISTORY ---------------------------
 elif page == "Riwayat Perawatan":
