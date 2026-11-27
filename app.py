@@ -673,11 +673,12 @@ with st.sidebar:
 # --------------------------- DASHBOARD ---------------------------
 if page == "Dashboard":
     st.subheader("Dashboard Monitoring Perawatan")
-        total_record = len(df)
-        if total_record:
+    total_record = len(df)
+    if total_record:
         # Bersihin nama kolom, biar spasi gak bikin error
-            df.columns = df.columns.str.strip()
-            if "Tanggal Perawatan" in df.columns:
+        df.columns = df.columns.str.strip()
+
+        if "Tanggal Perawatan" in df.columns:
             dates = pd.to_datetime(df["Tanggal Perawatan"], errors="coerce")
         else:
             dates = pd.Series([pd.NaT] * len(df))
@@ -689,6 +690,8 @@ if page == "Dashboard":
             tso_count = int((df["Status SO/TSO"].astype(str).str.upper() == "TSO").sum())
         else:
             so_count = tso_count = 0
+    else:
+        this_month = so_count = tso_count = 0
     else:
         this_month = so_count = tso_count = 0
     k1,k2,k3,k4 = st.columns(4)
