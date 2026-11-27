@@ -998,7 +998,7 @@ elif page == "Edit & Persetujuan":
         if "Waktu Input" in pending.columns:
             pending = pending.sort_values("Waktu Input", ascending=False)
         choices = pending.apply(lambda r: f"{r.get('Nomor Sarana','')} | {r.get('Tanggal Perawatan','')} | {r.get('Program Pemeliharaan','')} | {r.get('ID','')} | {r.get('Status Approval','')}", axis=1)
-        selected_label = st.selectbox("Pilih catatan perawatan", ["-- Pilih data --"] + choices)
+        selected_label = st.selectbox("Pilih catatan perawatan", ["-- Pilih data --"] + choices.tolist())
         if selected_label != "-- Pilih data --":
             selected_id = selected_label.split("|")[-1].split("[")[0].strip()
             selected_rows = df[df["ID"].astype(str) == selected_id]
