@@ -784,25 +784,17 @@ elif page == "Input Perawatan":
                 list_tampil = [("Tinggi Frame", "Tinggi Frame"), ("Axle Box", "Axle Box")]
                 if jenis_sarana == "B" and program in ["P3", "P6", "P12", "GD P12"]:
                     list_tampil.append(("Back to Back", "Back to Back"))
-                for component, label in list_tampil:
-    if component == "Back to Back":
-        st.markdown(f"**{label}**")
-        initial_special = pd.DataFrame({"Posisi": ["Bogie 1 A", "Bogie 1 B", "Bogie 2 A", "Bogie 2 B"], "Hasil Ukur": ["", "", "", ""]})
-        special_tables[f"{component}"] = st.data_editor(initial_special, key=f"{component.lower().replace(' ', '_')}", use_container_width=True, hide_index=True, num_rows="fixed", disabled=["Posisi"], column_config={"Posisi": st.column_config.TextColumn("Posisi", width="small"), "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", help="Tanda koma (,)")})
-        continue
-    for bn in (1, 2):
-        st.markdown(f"**{label} - Bogie {bn}**")
-        initial_special = pd.DataFrame({"Posisi": [f"Roda {i}" for i in range(1, 5)], "Hasil Ukur": ["", "", "", ""]})
-        special_tables[f"{component}_B{bn}"] = st.data_editor(initial_special, key=f"{component.lower().replace(' ', '_')}_b{bn}", use_container_width=True, hide_index=True, num_rows="fixed", disabled=["Posisi"], column_config={"Posisi": st.column_config.TextColumn("Posisi", width="small"), "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", help="Tanda koma (,)")})
-        continue
-    for bn in (1, 2):
-        st.markdown(f"**{label} - Bogie {bn}**")
-        initial_special = pd.DataFrame({"Posisi": [f"Roda {i}" for i in range(1, 5)], "Hasil Ukur": ["", "", "", ""]})
-        special_tables[f"{component}_B{bn}"] = st.data_editor(
-            initial_special, key=f"{component.lower().replace(' ', '_')}_b{bn}",
-            use_container_width=True, hide_index=True, num_rows="fixed", disabled=["Posisi"],
-            column_config={"Posisi": st.column_config.TextColumn("Posisi", width="small"),
-                           "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", help="Tanda koma (,)")})
+        for component, label in list_tampil:
+            if component == "Back to Back":
+                st.markdown(f"**{label}**")
+                initial_special = pd.DataFrame({"Posisi": ["Bogie 1 A", "Bogie 1 B", "Bogie 2 A", "Bogie 2 B"], "Hasil Ukur": ["", "", "", ""]})
+                special_tables[f"{component}"] = st.data_editor(initial_special, key=f"{component.lower().replace(' ', '_')}", use_container_width=True, hide_index=True, num_rows="fixed", disabled=["Posisi"], column_config={"Posisi": st.column_config.TextColumn("Posisi", width="small"), "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", help="Tanda koma (,)")})
+                continue
+            for bn in (1, 2):
+                st.markdown(f"**{label} - Bogie {bn}**")
+                initial_special = pd.DataFrame({"Posisi": [f"Roda {i}" for i in range(1, 5)], "Hasil Ukur": ["", "", "", ""]})
+                special_tables[f"{component}_B{bn}"] = st.data_editor(initial_special, key=f"{component.lower().replace(' ', '_')}_b{bn}", use_container_width=True, hide_index=True, num_rows="fixed", disabled=["Posisi"], column_config={"Posisi": st.column_config.TextColumn("Posisi", width="small"), "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", help="Tanda koma (,)")})
+       
                             
     for bn in (1, 2):
         st.markdown(f"**Spring Plank — Bogie {bn}**")
