@@ -997,11 +997,14 @@ elif page == "Edit & Persetujuan":
             pending["Status Approval"] = pending["Status Approval"].replace("", "Belum Approve")
         if "Waktu Input" in pending.columns:
             pending = pending.sort_values("Waktu Input", ascending=False)
-        choices = pending.apply(lambda r: f"{r.get('Nomor Sarana','')} | {r.get('Tanggal Perawatan','')} | {r.get('Program Pemeliharaan','')} | {r.get('ID','')} | {r.get('Status Approval','')}", axis=1)
-        selected_label = st.selectbox("Pilih catatan perawatan", ["-- Pilih data --"] + choices.tolist())
-        if selected_label != "-- Pilih data --":
-            selected_id = selected_label.split("|")[-1].split("[")[0].strip()
-            selected_rows = df[df["ID"].astype(str) == selected_id]
+        label_to_id = {}
+        for _, r in pending.iterrows():
+            label = f"{r.get('Nomor Sarana','')} | {r.get('Tanggal Perawatan','')} | {r.get('ID','')} | {r.get('Status Approval','')}"
+            label_to_id[label] = str(r.get('ID',''))
+        choices = list(label_to_id.keys())
+        selected_label = st.selectbox("Pilih catatan perawatan", ["-- Pilih data --"] + choices)
+        selected_id = label_to_id.get(selected_label, "")
+        selected_rows = df[df["ID"].astype(str) == selected_id] if selected_id else df.iloc[0:0]
             if not selected_rows.empty:
                 selected_record = selected_rows.iloc[0].to_dict()
                 approval_status = clean_text(selected_record.get("Status Approval")) or "Belum Approve"
