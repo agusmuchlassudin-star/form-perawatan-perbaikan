@@ -1100,6 +1100,27 @@ elif page == "Riwayat Perawatan":
     st.caption(f"Ditemukan {len(result):,} catatan")
     if len(result):
         result = result.copy()
+        # Pastikan kolom yang dipakai pada detail riwayat tersedia.
+        # Spreadsheet lama bisa memiliki susunan/nama header yang berbeda;
+        # kolom yang belum ada diisi kosong agar tidak memicu KeyError.
+        required_detail_columns = [
+            "ID", "Tanggal Perawatan", "Program Pemeliharaan", "Status SO/TSO",
+            "Jenis Sarana", "Depo/Lokasi", "P24/P48 Terakhir", "Nomor Bogie 1",
+            "Nomor Bogie 2", "Kondisi Sebelum", "Tindakan Perawatan", "Kondisi Sesudah",
+            "Keausan Knuckle Bogie 1", "Keausan Knuckle Bogie 2", "Kelengkapan Emptyload",
+            "Tebal Center Plate", "Tinggi Boffer", "Brake", "Release", "Langkah Torak",
+            "AC", "CD", "Tekanan BC", "Nama Petugas", "NIPP", "Nama Petugas 2",
+            "NIPP 2", "Nama Petugas 3", "NIPP 3", "Foto Sarana", "Foto Sebelum",
+            "Foto Saat Perbaikan", "Foto Sesudah", "Lain-lain", "Keterangan", "Waktu Input",
+        ]
+        for _column in required_detail_columns:
+            if _column not in result.columns:
+                # Cocokkan dahulu header lama yang hanya berbeda kapitalisasi/spasi.
+                _matches = [c for c in result.columns if str(c).strip().casefold() == _column.casefold()]
+                if _matches:
+                    result[_column] = result[_matches[0]]
+                else:
+                    result[_column] = ""
         if "Tanggal Perawatan" in result.columns:
             result["_date"] = pd.to_datetime(result["Tanggal Perawatan"], errors="coerce")
         else:
@@ -1118,7 +1139,7 @@ elif page == "Riwayat Perawatan":
             detail = result[result["Nomor Sarana"].astype(str) == selected]
             st.markdown(f"### Riwayat {selected}")
             for _, row in detail.iterrows():
-                title = f"{row['Tanggal Perawatan']} · {row['Program Pemeliharaan']} · {row['Status SO/TSO']} · ID {row['ID']}"
+                title = f"{row.get('Tanggal Perawatan', '')} · {row.get('Program Pemeliharaan', '')} · {row.get('Status SO/TSO', '')} · ID {row.get('ID', '')}"
                 with st.expander(title):
                     x,y = st.columns(2)
                     with x:
