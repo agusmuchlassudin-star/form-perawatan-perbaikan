@@ -706,22 +706,33 @@ if page == "Dashboard":
     a.metric("Perawatan Bulan Ini", f"{this_month:,}")
     b.metric("Status SO", f"{so_count:,}")
     c.metric("Status TSO", f"{tso_count:,}")
-    if total_record:
+        if total_record:
         left,right = st.columns([1,1])
         with left:
-            st.markdown("#### Catatan berdasarkan program")
-            prog = df["Program Pemeliharaan"].replace("", "Belum diisi").value_counts()
+            st.markdown("### Catatan berdasarkan program")
+            if "Program Pemeliharaan" in df.columns:
+                prog = df["Program Pemeliharaan"].replace("", "Belum diisi").value_counts()
+            else:
+                prog = pd.Series([], dtype=int)
             st.bar_chart(prog)
         with right:
-            st.markdown("#### Catatan berdasarkan jenis sarana")
-            typ = df["Jenis Sarana"].replace("", "Belum diisi").value_counts()
+            st.markdown("### Catatan berdasarkan jenis sarana")
+            if "Jenis Sarana" in df.columns:
+                typ = df["Jenis Sarana"].replace("", "Belum diisi").value_counts()
+            else:
+                typ = pd.Series([], dtype=int)
             st.bar_chart(typ)
-        st.markdown("#### 10 catatan terbaru")
+        st.markdown("### 10 catatan terbaru")
         recent = df.copy()
-        recent["_sort"] = pd.to_datetime(recent["Waktu Input"], errors="coerce")
+        if "Waktu Input" in recent.columns:
+            recent["_sort"] = pd.to_datetime(recent["Waktu Input"], errors="coerce")
+        else:
+            recent["_sort"] = pd.NaT
         recent = recent.sort_values("_sort", ascending=False).drop(columns="_sort").head(10)
-        show_cols = [c for c in ["Tanggal Perawatan","Jenis Sarana","Nomor Sarana","Program Pemeliharaan","Depo/Lokasi","Status SO/TSO","Nama Petugas"] if c in recent]
+        show_cols = [c for c in ["Tanggal Perawatan","Jenis Sarana","Nomor Sarana","Program Pemeliharaan","Depo/Lokasi","Status SO/TSO"] if c in recent.columns]
         st.dataframe(recent[show_cols], use_container_width=True, hide_index=True)
+    else:
+        st.info("Belum ada catatan perawatan. Mulai dengan menu Input Perawatan.")
     else:
         st.info("Belum ada catatan perawatan. Mulai dengan menu Input Perawatan.")
 
