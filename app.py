@@ -692,8 +692,6 @@ if page == "Dashboard":
             so_count = tso_count = 0
     else:
         this_month = so_count = tso_count = 0
-    else:
-        this_month = so_count = tso_count = 0
     k1,k2,k3,k4 = st.columns(4)
     for col, label, value, note in [
         (k1,"Total Populasi Sarana",FLEET_TOTAL,"Angka referensi populasi"),
