@@ -990,10 +990,14 @@ elif page == "Edit & Persetujuan":
     if df.empty:
         st.info("Belum ada data perawatan.")
     else:
-        pending = df.copy()
-        pending["Status Approval"] = pending["Status Approval"].replace("", "Belum Approve")
-        pending = pending.sort_values("Waktu Input", ascending=False)
-        choices = pending.apply(lambda r: f"{r['Nomor Sarana']} | {r['Tanggal Perawatan']} | {r['Program Pemeliharaan']} | {r['ID']} [{r['Status Approval']}]", axis=1).tolist()
+                pending = df.copy()
+        if "Status Approval" not in pending.columns:
+            pending["Status Approval"] = "Belum Approve"
+        else:
+            pending["Status Approval"] = pending["Status Approval"].replace("", "Belum Approve")
+        if "Waktu Input" in pending.columns:
+            pending = pending.sort_values("Waktu Input", ascending=False)
+        choices = pending.apply(lambda r: f"{r.get('Nomor Sarana','')} | {r.get('Tanggal Perawatan','')} | {r.get('Program Pemeliharaan','')} | {r.get('ID','')} | {r.get('Status Approval','')}", axis=1)
         selected_label = st.selectbox("Pilih catatan perawatan", ["-- Pilih data --"] + choices)
         if selected_label != "-- Pilih data --":
             selected_id = selected_label.split("|")[-1].split("[")[0].strip()
