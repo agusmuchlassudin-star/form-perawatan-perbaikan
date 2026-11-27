@@ -1090,7 +1090,7 @@ elif page == "Riwayat Perawatan":
             "Foto Saat Perbaikan":st.column_config.LinkColumn("Foto saat perbaikan", display_text="Buka foto"),
             "Foto Sesudah":st.column_config.LinkColumn("Foto sesudah", display_text="Buka foto"),
         })
-        options = sorted(result["Nomor Sarana"].astype(str).unique().tolist()) if "Nomor Sarana" in result.coloms else []
+        options = sorted(result["Nomor Sarana"].astype(str).unique().tolist()) if "Nomor Sarana" in result.coloums else []
         selected = st.selectbox("Tampilkan detail riwayat sarana", ["-- Pilih nomor sarana --"] + options)
         if selected != "-- Pilih nomor sarana --":
             detail = result[result["Nomor Sarana"].astype(str) == selected]
