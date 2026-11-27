@@ -1005,7 +1005,7 @@ elif page == "Edit & Persetujuan":
         selected_label = st.selectbox("Pilih catatan perawatan", ["-- Pilih data --"] + choices)
         selected_id = label_to_id.get(selected_label, "")
         selected_rows = df[df["ID"].astype(str) == selected_id] if selected_id else df.iloc[0:0]
-            if not selected_rows.empty:
+        if not selected_rows.empty:
                 selected_record = selected_rows.iloc[0].to_dict()
                 approval_status = clean_text(selected_record.get("Status Approval")) or "Belum Approve"
                 st.markdown(f"**Nomor Sarana:** {selected_record.get('Nomor Sarana','')}  ")
