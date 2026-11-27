@@ -1175,7 +1175,7 @@ elif page == "Laporan Otomatis":
             if c.lower().strip().startswith("status"):
                 rename_map[c] = "Status SO/TSO"
         r = r.rename(columns=rename_map)
-        r = r.loc[:, ~r.columns.duplicated()]
+        r = r.loc[:, ~r.columns.duplicated(keep="last")]
         parsed = pd.to_datetime(r["Tanggal Perawatan"], errors="coerce")
         r = r[(parsed.dt.date >= start) & (parsed.dt.date <= end)]
         x,y,z = st.columns(3)
