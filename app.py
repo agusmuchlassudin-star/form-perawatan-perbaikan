@@ -1170,6 +1170,9 @@ elif page == "Laporan Otomatis":
             rename_map[lower_map["nomor sarana"]] = "Nomor Sarana"
         if "depo/lokasi" in lower_map:
             rename_map[lower_map["depo/lokasi"]] = "Depo/lokasi"
+        for c in list(r.columns):
+            if c.lower().strip().startswith("status"):
+                rename_map[c] = "Status SO/TSO"
         r = r.rename(columns=rename_map)
         parsed = pd.to_datetime(r["Tanggal Perawatan"], errors="coerce")
         r = r[(parsed.dt.date >= start) & (parsed.dt.date <= end)]
