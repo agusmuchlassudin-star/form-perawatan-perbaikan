@@ -673,12 +673,11 @@ with st.sidebar:
 # --------------------------- DASHBOARD ---------------------------
 if page == "Dashboard":
     st.subheader("Dashboard Monitoring Perawatan")
-    total_record = len(df)
+        total_record = len(df)
         if total_record:
         # Bersihin nama kolom, biar spasi gak bikin error
-        df.columns = df.columns.str.strip()
-
-        if "Tanggal Perawatan" in df.columns:
+            df.columns = df.columns.str.strip()
+            if "Tanggal Perawatan" in df.columns:
             dates = pd.to_datetime(df["Tanggal Perawatan"], errors="coerce")
         else:
             dates = pd.Series([pd.NaT] * len(df))
