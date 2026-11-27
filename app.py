@@ -1185,10 +1185,6 @@ elif page == "Laporan Otomatis":
         r.columns = [str(c).strip() for c in r.columns]
         r = r.loc[:, ~pd.Index([c.lower() for c in r.columns]).duplicated(keep="first")]
         r = r.rename(columns={c: "Tanggal Perawatan" for c in r.columns if c.lower() == "tanggal perawatan"})
-        st.write("KOLOM SETELAH FIX:", r.columns.tolist())
-        st.write("JUMLAH:", len(r))
-        st.write("ISI BARIS 1:", r.head(1).to_dict("records"))
-        parsed = pd.to_datetime(r["Tanggal Perawatan"], errors="coerce", dayfirst=True)
         r = r[(parsed.dt.date >= start) & (parsed.dt.date <= end)]
         x,y,z = st.columns(3)
         with x: types = st.multiselect("Jenis sarana", sorted([v for v in r["Jenis Sarana"].dropna().astype(str).unique()]), default=sorted([v for v in r["Jenis Sarana"].dropna().astype(str).unique()]))
