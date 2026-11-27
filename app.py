@@ -778,7 +778,8 @@ elif page == "Input Perawatan":
             key = "Back to Back"
             df = pd.DataFrame({"Posisi": ["Bogie 1 A", "Bogie 1 B", "Bogie 2 A", "Bogie 2 B"], "Hasil Ukur": [""]*4})
             special_tables[key] = df
-                
+
+        list_tampil = []
         if (jenis_sarana == "B" and program in ["P3", "P6", "P12", "GD P12"]) or (jenis_sarana == "GD" and program in ["GD P12"]):
                 st.markdown("### 4. Pengukuran khusus Sarana B")
                 list_tampil = [("Tinggi Frame", "Tinggi Frame"), ("Axle Box", "Axle Box")]
