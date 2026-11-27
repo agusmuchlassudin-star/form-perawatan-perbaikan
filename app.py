@@ -733,9 +733,7 @@ if page == "Dashboard":
         st.dataframe(recent[show_cols], use_container_width=True, hide_index=True)
     else:
         st.info("Belum ada catatan perawatan. Mulai dengan menu Input Perawatan.")
-    else:
-        st.info("Belum ada catatan perawatan. Mulai dengan menu Input Perawatan.")
-
+   
 # --------------------------- INPUT ---------------------------
 elif page == "Input Perawatan":
     st.subheader("Input Pemeriksaan & Pemeliharaan Sarana")
