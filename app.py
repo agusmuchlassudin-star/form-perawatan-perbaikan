@@ -801,12 +801,8 @@ elif page == "Input Perawatan":
             initial_special, key=f"{component.lower().replace(' ', '_')}_b{bn}",
             use_container_width=True, hide_index=True, num_rows="fixed", disabled=["Posisi"],
             column_config={"Posisi": st.column_config.TextColumn("Posisi", width="small"),
-                           "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", help="Tanda koma (,)")})
-                            special_tables[f"{component}_B{bn}"] = st.data_editor(
-                            initial_special, key=f"{component.lower().replace(' ', '_')}_b{bn}",
-                            use_container_width=True, hide_index=True, num_rows="fixed", disabled=["Posisi"],
-                            column_config={"Posisi": st.column_config.TextColumn("Posisi", width="small"),
-                                           "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", help="Tanda koma (,) diperbolehkan, contoh 12,5.")})
+                           "Hasil Ukur": st.column_config.TextColumn("Hasil ukur", help="Tanda koma (,)")}})
+                            
                 for bn in (1, 2):
                     st.markdown(f"**Spring Plank — Bogie {bn}**")
                     initial_spring = pd.DataFrame({"Nomor": ["Nomor 1", "Nomor 2"], "Hasil Ukur": ["", ""]})
