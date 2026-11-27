@@ -1157,7 +1157,20 @@ elif page == "Laporan Otomatis":
             st.stop()
         r = df.copy()
         r.columns = [str(c).strip() for c in r.columns]
-        st.write("KOLOM ASLI DI SHEET:", list(r.columns))
+        # Samain nama kolom yang hurufnya beda
+        lower_map = {c.lower(): c for c in r.columns}
+        rename_map = {}
+        if "tanggal perawatan" in lower_map:
+            rename_map[lower_map["tanggal perawatan"]] = "Tanggal Perawatan"
+        if "jenis sarana" in lower_map:
+            rename_map[lower_map["jenis sarana"]] = "Jenis Sarana"
+        if "program pemeliharaan" in lower_map:
+            rename_map[lower_map["program pemeliharaan"]] = "Program Pemeliharaan"
+        if "nomor sarana" in lower_map:
+            rename_map[lower_map["nomor sarana"]] = "Nomor Sarana"
+        if "depo/lokasi" in lower_map:
+            rename_map[lower_map["depo/lokasi"]] = "Depo/lokasi"
+        r = r.rename(columns=rename_map)
         parsed = pd.to_datetime(r["Tanggal Perawatan"], errors="coerce")
         r = r[(parsed.dt.date >= start) & (parsed.dt.date <= end)]
         x,y,z = st.columns(3)
