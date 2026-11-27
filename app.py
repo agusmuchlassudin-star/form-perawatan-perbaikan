@@ -1078,8 +1078,11 @@ elif page == "Riwayat Perawatan":
     st.caption(f"Ditemukan {len(result):,} catatan")
     if len(result):
         result = result.copy()
-        result["_date"] = pd.to_datetime(result["Tanggal Perawatan"], errors="coerce")
-        result = result.sort_values("_date", ascending=False).drop(columns="_date")
+     if "Tanggal Perawatan" in result.columns:
+         result["_date"] = pd.to_datetime(result["Tanggal Perawatan"], errors="coerce")
+     else:
+         result["_date"] = pd.NaT
+         result = result.sort_values("_date", ascending=False).drop(columns="_date")
         visible = [c for c in ["Tanggal Perawatan","Jenis Sarana","Nomor Sarana","Program Pemeliharaan","P24/P48 Terakhir","Depo/Lokasi","Status SO/TSO","Status Approval","Disetujui Oleh","Nama Petugas","Foto Sarana","Foto Sebelum","Foto Saat Perbaikan","Foto Sesudah"] if c in result]
         st.dataframe(result[visible], use_container_width=True, hide_index=True, column_config={
             "Foto Sarana":st.column_config.LinkColumn("Foto sarana", display_text="Buka foto"),
@@ -1087,7 +1090,7 @@ elif page == "Riwayat Perawatan":
             "Foto Saat Perbaikan":st.column_config.LinkColumn("Foto saat perbaikan", display_text="Buka foto"),
             "Foto Sesudah":st.column_config.LinkColumn("Foto sesudah", display_text="Buka foto"),
         })
-        options = sorted(result["Nomor Sarana"].astype(str).unique().tolist())
+        options = sorted(result["Nomor Sarana"].astype(str).unique().tolist()) if "Nomor Sarana" in result.coloms else []
         selected = st.selectbox("Tampilkan detail riwayat sarana", ["-- Pilih nomor sarana --"] + options)
         if selected != "-- Pilih nomor sarana --":
             detail = result[result["Nomor Sarana"].astype(str) == selected]
