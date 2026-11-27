@@ -1176,7 +1176,10 @@ elif page == "Laporan Otomatis":
                 rename_map[c] = "Status SO/TSO"
         r = r.rename(columns=rename_map)
         r = r.loc[:, ~r.columns.duplicated(keep="last")]
-        parsed = pd.to_datetime(r["Tanggal Perawatan"], errors="coerce")
+        st.write("JUMLAH SEBELUM FILTER TANGGAL:", len(r))
+        st.write("CONTOH TANGGAL:", r["Tanggal Perawatan"].head(3).tolist())
+        st.write("KOLOM:", r.columns.tolist())
+        parsed = pd.to_datetime(r["Tanggal Perawatan"], errors="coerce", dayfirst=True)
         r = r[(parsed.dt.date >= start) & (parsed.dt.date <= end)]
         x,y,z = st.columns(3)
         with x: types = st.multiselect("Jenis sarana", sorted([v for v in r["Jenis Sarana"].dropna().astype(str).unique()]), default=sorted([v for v in r["Jenis Sarana"].dropna().astype(str).unique()]))
